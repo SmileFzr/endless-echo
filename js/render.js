@@ -4,6 +4,7 @@
    ============================================================ */
 
 function render() {
+  if (G.state === 'town') { drawTown(); return; }
   ctx.fillStyle = '#07070e';
   ctx.fillRect(0, 0, W, H);
   if (!P) return;
@@ -12,7 +13,9 @@ function render() {
   ctx.save();
   ctx.translate(W / 2 + shx, H / 2 + shy);
   ctx.translate(-P.x, -P.y);
-  drawGrid(); drawPortals(); drawOrbs(); drawEffects(false);
+  drawGrid(); drawPortals();
+  if (typeof drawBlackHole === 'function') drawBlackHole();   // 黑洞随机事件
+  drawOrbs(); drawEffects(false);
   drawEnemies(); drawPets(); drawBullets(); drawEBullets();
   drawPlayer(); drawEffects(true); drawTexts();
   ctx.restore();
@@ -27,6 +30,7 @@ function render() {
   }
   drawPortalArrows();
   drawEliteIndicator();
+  if (typeof drawBlackHoleIndicator === 'function') drawBlackHoleIndicator();
 }
 function drawGrid() {
   const gs = 110;

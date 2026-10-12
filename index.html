@@ -21,6 +21,7 @@
         <div>⏱ <b id="timeTxt">0:00</b></div>
         <div>💀 <b id="killTxt">0</b></div>
         <div>💰 <b id="goldTxt">0</b></div>
+        <div id="hudSpecials"></div>
         <div class="hudbtns">
           <button class="audioBtn" id="btnAudio" title="音效开关">🔊</button>
           <button class="audioBtn" id="btnPause" title="暂停">⏸</button>
@@ -150,6 +151,23 @@
     </div>
   </div>
   <div id="toast"></div>
+<div id="townBar" class="hidden">
+    <div class="town-head">
+      <span class="town-name">🌆 回声小镇</span>
+      <span class="town-note">绝对安全 · 南门可离开</span>
+    </div>
+    <div id="townSkills"></div>
+  </div>
+  <div id="townPrompt" class="hidden"></div>
+  <button id="btnTownAct" class="town-act">交 谈</button>
+  <div class="veil hidden" id="npcDlg">
+    <div class="card">
+      <div class="title" id="dlgTitle" style="font-size:20px"></div>
+      <div class="sub">TALK</div>
+      <div class="dlg" id="dlgBody"></div>
+      <div id="dlgActions"></div>
+    </div>
+  </div>
 </div>
 <script src="js/utils.js"></script>
 <script src="js/audio.js"></script>
@@ -158,5 +176,6 @@
 <script src="js/skills.js"></script>
 <script src="js/render.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/blackhole.js"></script>
 </body>
 </html>

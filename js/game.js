@@ -52,7 +52,8 @@ function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)
 loadSave();
 
 const input = { keys: new Set(), joy: { active:false, ox:0, oy:0, dx:0, dy:0, id:null } };
-window.addEventListener('keydown', e => { input.keys.add(e.key.toLowerCase()); if (e.key === 'Escape') { if (G.state === 'playing') pauseGame(); else if (G.state === 'paused') resumeGame(); } if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault(); });
+window.addEventListener('keydown', e => { input.keys.add(e.key.toLowerCase()); if (e.key === 'f' || e.key === 'F') townInteract();   // 城镇里与 NPC 交谈 / 离开
+  if (e.key === 'Escape') { if (G.state === 'playing') pauseGame(); else if (G.state === 'paused') resumeGame(); } if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault(); });
 window.addEventListener('keyup', e => input.keys.delete(e.key.toLowerCase()));
 function getPointer(e) { const t = e.touches ? e.touches[0] : e; return { x:t.clientX, y:t.clientY, id:t.identifier !== undefined ? t.identifier : 'm' }; }
 canvas.addEventListener('touchstart', e => { e.preventDefault(); if (G.state !== 'playing') return; if (input.joy.active) return; const p = getPointer(e); input.joy.active = true; input.joy.id = p.id; input.joy.ox = p.x; input.joy.oy = p.y; input.joy.dx = 0; input.joy.dy = 0; }, { passive: false });
@@ -72,7 +73,9 @@ function createPlayer() {
 function expForLevel(lv) { return Math.floor(4 + lv * 2.6 + Math.pow(lv, 1.42)); }
 function recalcStats() {
   let dmg = 1, spd = 1, cdr = 0, pick = 82, expm = 1, hpBonus = 0, armor = 0, regen = 0, crit = 0.05;
-  dmg += SAVE.up.dmg * 0.05; spd += SAVE.up.spd * 0.04; cdr += SAVE.up.cdr * 0.03; hpBonus += SAVE.up.hp * 10;
+  // 注意: 永久强化 SAVE.up.hp / .spd 已在 createPlayer() 里计入 baseHp / baseSpeed,
+  //       这里不能重复加, 否则每点永久生命实际 +32 而不是 +22。
+  dmg += SAVE.up.dmg * 0.05; cdr += SAVE.up.cdr * 0.03;
   const u = P.up;
   dmg += u.dmg * 0.08; spd += u.speed * 0.07; cdr += u.cdr * 0.06; pick += u.pickup * 14;
   hpBonus += u.maxhp * 22; armor += u.armor * 0.05; regen += u.regen * 0.5; crit += u.crit * 0.04;
@@ -179,8 +182,7 @@ function updateSpawn(dt) {
   let count = 1 + Math.floor(m * 0.28);
   if (G.diffCount > 0) count += Math.floor(G.diffCount * 0.6);
   count = Math.min(count, 7);
-  if (enemies.length > 320) return;
-  for (let i = 0; i < count; i++) spawnOne();
+  for (let i = 0; i < count; i++) { if (enemies.length >= 320) break; spawnOne(); }
 }
 function spawnOne() {
   const avail = [['normal', 10]];
@@ -215,12 +217,13 @@ function updatePlayer(dt) {
   if (len > 1) { mx /= len; my /= len; }
   P.moving = len > 0.1;
   if (P.moving) P.stillTime = 0; else P.stillTime += dt;
-  P.x += mx * P.speed * dt; P.y += my * P.speed * dt;
+  const spd = P.speed * (P.wingT > 0 ? 1.9 : 1);   // 风之翼加速
+  P.x += mx * spd * dt; P.y += my * spd * dt;
   if (P.invuln > 0) P.invuln -= dt;
   if (P.hurtFlash > 0) P.hurtFlash -= dt;
   recalcStats();
   if (P.regen > 0) P.hp = Math.min(P.maxHp, P.hp + P.regen * dt);
-  for (const e of enemies) {
+  if (P.bootsT <= 0) for (const e of enemies) {   // 踏空靴生效时不与怪物碰撞
     if (e.dead) continue;
     const dx = e.x - P.x, dy = e.y - P.y, rr = e.r + P.r;
     if (dx * dx + dy * dy < rr * rr) {
@@ -392,7 +395,12 @@ function updateEnemies(dt) {
       e.x += Math.cos(moveA) * sp * dt; e.y += Math.sin(moveA) * sp * dt;
       e.chargeCd = (e.chargeCd || 3) - dt;
       if (e.chargeCd <= 0 && dist < 420) { e.chargeCd = 4.5; e.chargeT = 0.55; effects.push({ kind:'ring', x:e.x, y:e.y, life:0.4, max:0.4, r:110, col:'#ff5f6d' }); }
-      if (e.chargeT > 0) { e.chargeT -= dt; e.x += (dx / dist) * e.speed * 4.5 * dt; e.y += (dy / dist) * e.speed * 4.5 * dt; }
+      if (e.chargeT > 0) {
+        e.chargeT -= dt;
+        e.x += (dx / dist) * e.speed * 4.5 * dt; e.y += (dy / dist) * e.speed * 4.5 * dt;
+        // 冲锋期间持续刷新无敌帧, 避免一次冲锋被反复结算伤害
+        if (P.invuln < 0.12) P.invuln = 0.12;
+      }
     } else {
       e.wob += dt * 2.4;
       const moveA = Math.atan2(dy, dx) + Math.sin(e.wob) * 0.25;
@@ -477,8 +485,11 @@ function update(dt) {
   G.time += dt;
   if (G.mode === 'challenge' && G.time >= G.challengeEnd) { challengeWin(); return; }
   updatePlayer(dt); updatePets(dt); updateSkills(dt); updateEnemies(dt);
+  updateSpecials(dt);   // 特殊能力冷却(黑洞小镇的奖励)
+  questTick(dt);        // 推进 NPC 战斗任务进度
   updateBullets(dt); updateEBullets(dt); updateOrbs(dt); updateSpawn(dt);
   updateEffects(dt); updatePortals(dt);
+  updateBlackHole(dt);  // 黑洞随机事件: 生成与吸入
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 42);
   updateHUD();
 }

@@ -209,6 +209,9 @@ if (typeof document !== 'undefined') {
   });
 }
 function backToMenu() {
+  if (typeof closeNPCDialog === 'function') closeNPCDialog();
+  el('townBar').classList.add('hidden');
+  el('townPrompt').classList.add('hidden');
   el('pauseVeil').classList.add('hidden'); el('resetVeil').classList.add('hidden');
   el('over').classList.add('hidden');
   el('hud').classList.add('hidden'); el('menu').classList.remove('hidden');
@@ -217,7 +220,12 @@ function backToMenu() {
 }
 function requestReset() { el('pauseVeil').classList.add('hidden'); el('resetVeil').classList.remove('hidden'); }
 function doResetSave() {
-  SAVE = { gold:0, up:{ hp:0, spd:0, dmg:0, cdr:0, size:0 }, best:0, pets:[], selected:[] };
+  if (typeof closeNPCDialog === 'function') closeNPCDialog();
+  el('townBar').classList.add('hidden');
+  el('townPrompt').classList.add('hidden');
+  // 特殊能力(S.D. 的城镇奖励)与任务进度保留, 不被重置存档清掉
+  SAVE = { gold:0, up:{ hp:0, spd:0, dmg:0, cdr:0, size:0 }, best:0, pets:[], selected:[],
+           specials: (SAVE && SAVE.specials) || {}, quests: (SAVE && SAVE.quests) || {} };
   writeSave(); selectedPets = [];
   el('resetVeil').classList.add('hidden'); el('pauseVeil').classList.add('hidden');
   el('over').classList.add('hidden');
@@ -227,6 +235,8 @@ function doResetSave() {
   toast('✅ 存档已重置');
 }
 el('btnPause').onclick = (e) => { e.stopPropagation(); pauseGame(); };
+el('btnTownAct').onclick = () => townInteract();
+if (typeof updateHudSpecials === 'function') updateHudSpecials();
 el('btnResume').onclick = () => resumeGame();
 el('btnRestart').onclick = () => {
   el('pauseVeil').classList.add('hidden');
@@ -356,8 +366,9 @@ function startGame(mode, petIds) {
   P.pets = [];
   (petIds || []).forEach((id, i) => {
     if (!PETS[id]) return;
-    P.pets.push({ id, lv:1, mut:false, cd:rnd(0.2, 0.8), x:P.x + Math.cos(i * Math.PI) * 48, y:P.y + Math.sin(i * Math.PI) * 48, steal:0, pounceT:0, breathT:0, breathTick:0, breathAngle:0 });
+    P.pets.push({ id, lv:1, mut:false, cd:rnd(0.2, 0.8), x:P.x + Math.cos(i * Math.PI) * 48, y:P.y + Math.sin(i * Math.PI) * 48, steal:0, breathT:0, breathTick:0, breathAngle:0 });
   });
+  P.wingT = 0; P.bootsT = 0; P.specials = {};   // 特殊能力计时
   const starters = ['homing', 'sword', 'lightning', 'bomb'];
   P.skills.push({ id:pick(starters), lv:1, mut:null, cd:0.5 });
   el('menu').classList.add('hidden'); el('over').classList.add('hidden');
@@ -418,6 +429,7 @@ function frame(now) {
   lastT = now;
   if (dt > 0.05) dt = 0.05;
   if (G.state === 'playing') update(dt);
+  else if (G.state === 'town') updateTown(dt);
   if (P) render();
   else { ctx.fillStyle = '#07070e'; ctx.fillRect(0, 0, W, H); }
 }

@@ -1,0 +1,618 @@
+/* ============================================================
+   黑洞与小镇 / black hole & town
+   无尽回响 Endless Echo
+   ============================================================
+   玩法:
+     主地图上满足条件(至少 3 个技能, 且至少 1 个技能达到 3 级)后,
+     每 3~5 分钟随机刷出一个黑洞。走进黑洞会被传送到"回声小镇"——
+     一张绝对安全的城镇地图(不刷怪、不掉血), 里面住着几位 NPC。
+     和 NPC 对话可接下"回主地图完成"的战斗任务, 完成后再回来交差,
+     即可解锁带冷却的特殊能力(翅膀加速、靴子无敌穿行等)。
+
+   数据落点:
+     G.bh          本模块在主地图/城镇间共享的状态
+     SAVE.quests   各 NPC 任务进度
+     SAVE.specials 已解锁的特殊能力
+     P.specials    本局中特殊能力的冷却/持续时间
+   ============================================================ */
+
+/* ---------------- 触发条件与节奏 ---------------- */
+const BH_TRIGGER_SKILLS = 3;      // 至少拥有 3 个技能
+const BH_TRIGGER_LEVEL = 3;       // 且至少 1 个技能达到 3 级
+const BH_RESPAWN_MIN = 180;       // 下一次黑洞最早 3 分钟
+const BH_RESPAWN_MAX = 300;       // 最晚 5 分钟
+const BH_PORTAL_LIFE = 150;       // 黑洞存在 150 秒后自行消失
+const BH_ENTER_RADIUS = 46;       // 走进这个距离就被吸入
+
+/* ---------------- 特殊能力 ---------------- */
+const SPECIALS = {
+  wing: {
+    id: 'wing', name: '风之翼', icon: '🪽', key: '1',
+    desc: '展开风翼，移动速度 +90%，持续 5 秒',
+    cd: 14, dur: 5,
+    activate() { P.wingT = this.dur; toast('🪽 风之翼展开！'); sfx('mut'); },
+    update(dt) { if (P.wingT > 0) P.wingT -= dt; },
+  },
+  boots: {
+    id: 'boots', name: '踏空靴', icon: '👟', key: '2',
+    desc: '2.5 秒内无敌，并可无视碰撞穿过怪物群',
+    cd: 16, dur: 2.5,
+    activate() { P.bootsT = this.dur; toast('👟 踏空靴启动！无敌穿行'); sfx('shop'); },
+    update(dt) { if (P.bootsT > 0) P.bootsT -= dt; },
+  },
+  sight: {
+    id: 'sight', name: '鹰眼', icon: '👁️', key: '3', passive: true,
+    desc: '暴击率 +12%（被动）',
+  },
+  magnet: {
+    id: 'magnet', name: '磁石', icon: '🧲', key: '4', passive: true,
+    desc: '拾取范围 +60（被动）',
+  },
+  furnace: {
+    id: 'furnace', name: '熔炉', icon: '🔥', key: '5', passive: true,
+    desc: '所有伤害 +12%（被动）',
+  },
+};
+
+/* ---------------- NPC 与任务 ---------------- */
+const NPCS = [
+  {
+    id: 'hunter', name: '猎手 阿岩', emoji: '🏹', x: -175, y: -140,
+    request: '东边的精英怪快把猎场占满了。替我干掉一只精英怪，这把风之翼就归你。',
+    thanks: '干净利落！风之翼归你了 —— 想跑得快，就朝风的方向。',
+    quest: { kind: 'elite', goal: 1, text: '击杀精英怪' },
+    reward: 'wing',
+  },
+  {
+    id: 'smith', name: '铁匠 老铸', emoji: '🔨', x: 175, y: -140,
+    request: '我要 30 块怪物晶核来重锻炉火。你替我去外面清一波怪，我这双踏空靴就送你。',
+    thanks: '炉火重燃！这双踏空靴给你 —— 踩上去，怪物撞不着你。',
+    quest: { kind: 'kill', goal: 30, text: '击杀怪物' },
+    reward: 'boots',
+  },
+  {
+    id: 'traveler', name: '旅行者 图娅', emoji: '🧭', x: 195, y: 165,
+    request: '我在这小镇待太久了，想知道外面还能不能撑。你在外面活过 120 秒再回来告诉我。',
+    thanks: '你活着回来了，眼里有光。这枚鹰眼徽记送你 —— 看得清，才活得久。',
+    quest: { kind: 'survive', goal: 120, text: '在主地图存活' },
+    reward: 'sight',
+  },
+  {
+    id: 'scholar', name: '学者 灰笔', emoji: '📖', x: -190, y: 170,
+    request: '我在研究回响的磁性。你带 200 金币回来，我教你聚拢经验的法子。',
+    thanks: '钱够了。记住：万物皆可吸引，包括经验。这枚磁石给你。',
+    quest: { kind: 'gold', goal: 200, text: '累计获得金币' },
+    reward: 'magnet',
+  },
+  {
+    id: 'elder', name: '镇长 索恩', emoji: '🎩', x: 0, y: -195,
+    request: '想证明你配得上这座镇子？撑过 300 秒再说。熔炉的火只认硬骨头。',
+    thanks: '你撑住了。把这炉余烬带上 —— 让每一击都更重。',
+    quest: { kind: 'survive', goal: 300, text: '在主地图存活' },
+    reward: 'furnace',
+  },
+];
+
+/* ---------------- 城镇状态 ---------------- */
+const T = {
+  x: 0, y: 0, r: 15,
+  near: null,          // 当前可交互的 NPC
+  exit: { x: 0, y: 268, r: 34 },
+  anim: 0,
+};
+
+function townNpcState(npc) {
+  return (SAVE.quests && SAVE.quests[npc.id]) || null;
+}
+
+function ensureSaveSlots() {
+  if (!SAVE.quests || typeof SAVE.quests !== 'object') SAVE.quests = {};
+  if (!SAVE.specials || typeof SAVE.specials !== 'object') SAVE.specials = {};
+}
+
+/* 任务是否达成(只判断进度, 不发放奖励) */
+function questDone(q) { return !!q && q.cur >= q.goal; }
+
+/* 任务进度推进(在主地图的 update 里调用) */
+function questTick(dt) {
+  ensureSaveSlots();
+  for (const npc of NPCS) {
+    const st = SAVE.quests[npc.id];
+    if (!st || st.done) continue;
+    const q = st.quest;
+    switch (q.kind) {
+      case 'survive': q.cur += dt; break;                       // 存活时长实时累加
+      case 'kill':    q.cur = G.kills - q.base; break;          // 击杀数增量
+      case 'elite':   q.cur = G.diffCount - q.base; break;      // 精英击杀增量
+      case 'gold':    q.cur = G.runGold - q.base; break;        // 本局金币增量
+      default: break;
+    }
+    if (q.cur > q.goal) q.cur = q.goal;
+    if (questDone(q)) { st.done = true; }
+  }
+}
+
+/* ---------------- 主地图: 黑洞的生成与吸入 ---------------- */
+function bhEligible() {
+  if (!P || !P.skills) return false;
+  if (P.skills.length < BH_TRIGGER_SKILLS) return false;
+  return P.skills.some(s => s.lv >= BH_TRIGGER_LEVEL);
+}
+
+function updateBlackHole(dt) {
+  if (G.mode !== 'endless' && G.mode !== 'challenge') return;
+  ensureSaveSlots();
+  if (!G.bh) G.bh = { timer: null, portal: null, townReturn: false, announced: false };
+
+  // 条件刚达成时给一次提示
+  if (!G.bh.announced && bhEligible()) {
+    G.bh.announced = true;
+    G.bh.timer = rnd(BH_RESPAWN_MIN, BH_RESPAWN_MAX);
+    toast('🕳 回响开始扭曲…黑洞即将出现');
+  }
+  if (!G.bh.announced) return;
+
+  // 黑洞里不要重复生成
+  if (G.bh.portal) {
+    const po = G.bh.portal;
+    po.life -= dt;
+    po.spin += dt * 0.8;
+    const d = Math.hypot(P.x - po.x, P.y - po.y);
+    if (d < BH_ENTER_RADIUS + P.r) { enterTown(); return; }
+    if (po.life <= 0) { G.bh.portal = null; G.bh.timer = rnd(BH_RESPAWN_MIN, BH_RESPAWN_MAX); toast('🕳 黑洞消散了…'); }
+    return;
+  }
+
+  G.bh.timer -= dt;
+  if (G.bh.timer > 0) return;
+
+  // 生成黑洞: 出现在玩家视野附近但不重叠
+  const a = Math.random() * TAU;
+  const dist = rnd(420, 780);
+  G.bh.portal = { x: P.x + Math.cos(a) * dist, y: P.y + Math.sin(a) * dist, life: BH_PORTAL_LIFE, spin: 0 };
+  G.bh.townReturn = false;
+  toast('🕳 黑洞出现了！走进去看看');
+  sfx('elite');
+  G.shake = Math.max(G.shake, 8);
+}
+
+/* ---------------- 进出城镇 ---------------- */
+function enterTown() {
+  T.x = 0; T.y = 190;          // 从南门进入
+  T.near = null;
+  G.bh.townReturn = true;
+  G.bh.portal = null;          // 离开主地图期间黑洞不再存在
+  G.bh.timer = rnd(BH_RESPAWN_MIN, BH_RESPAWN_MAX);
+  G.state = 'town';
+  el('hud').classList.add('hidden');
+  el('townBar').classList.remove('hidden');
+  sfx('shop');
+  toast('🌆 回声小镇 · 这里很安全');
+  syncSpecialBars();
+}
+
+function leaveTown() {
+  G.state = 'playing';
+  el('townBar').classList.add('hidden');
+  closeNPCDialog();
+  el('hud').classList.remove('hidden');
+  // 从黑洞旁边出来, 避免立刻又被吸进去
+  if (G.bh && G.bh.portal) {
+    const a = Math.random() * TAU;
+    P.x = G.bh.portal.x + Math.cos(a) * 260;
+    P.y = G.bh.portal.y + Math.sin(a) * 260;
+  }
+  G.bh.townReturn = false;
+  toast('回到荒野');
+  sfx('shop');
+}
+
+/* ---------------- 城镇内的交互 ---------------- */
+function updateTown(dt) {
+  T.anim += dt;
+  // 移动(复用虚拟摇杆与键盘)
+  let mx = 0, my = 0;
+  if (input.keys.has('a') || input.keys.has('arrowleft'))  mx -= 1;
+  if (input.keys.has('d') || input.keys.has('arrowright')) mx += 1;
+  if (input.keys.has('w') || input.keys.has('arrowup'))    my -= 1;
+  if (input.keys.has('s') || input.keys.has('arrowdown'))  my += 1;
+  if (input.joy.active) { const jx = input.joy.dx / 62, jy = input.joy.dy / 62; if (Math.hypot(jx, jy) > 0.08) { mx = jx; my = jy; } }
+  const len = Math.hypot(mx, my);
+  if (len > 1) { mx /= len; my /= len; }
+  const speed = 230;
+  T.x += mx * speed * dt;
+  T.y += my * speed * dt;
+
+  // 城镇边界(矩形围墙)
+  const BX = 232, BY = 212;
+
+  // 建筑碰撞(简单矩形推开)
+  for (const b of townBuildings) {
+    const hw = b.w / 2 + T.r * 0.6, hh = b.h / 2 + T.r * 0.6;
+    const dx = T.x - b.x, dy = T.y - b.y;
+    if (Math.abs(dx) < hw && Math.abs(dy) < hh) {
+      const ox = hw - Math.abs(dx), oy = hh - Math.abs(dy);
+      if (ox < oy) T.x = b.x + Math.sign(dx || 1) * hw;
+      else T.y = b.y + Math.sign(dy || 1) * hh;
+    }
+  }
+
+  // 边界钳制放在建筑碰撞之后, 否则被建筑推开时可能被推出围墙
+  T.x = clamp(T.x, -BX + T.r, BX - T.r);
+  T.y = clamp(T.y, -BY + T.r, BY - T.r);
+
+  // 最近的 NPC
+  let best = null, bd = 62;
+  for (const npc of NPCS) {
+    const d = Math.hypot(T.x - npc.x, T.y - npc.y);
+    if (d < bd) { bd = d; best = npc; }
+  }
+  T.near = best;
+  const exitD = Math.hypot(T.x - T.exit.x, T.y - T.exit.y);
+  const atExit = exitD < T.exit.r + T.r * 0.8;
+
+  // 交互提示条
+  const prompt = el('townPrompt');
+  if (best) {
+    const st = townNpcState(best);
+    const mark = !st ? '❗ 有新委托' : (st.done && !st.claimed ? '✅ 可交差' : (st.claimed ? '　' : '…进行中'));
+    prompt.textContent = '按 F / 点这里 与 ' + best.name + ' 交谈　' + mark;
+    prompt.classList.remove('hidden');
+  } else if (atExit) {
+    prompt.textContent = '按 F / 点这里 离开小镇，回到荒野';
+    prompt.classList.remove('hidden');
+  } else {
+    prompt.classList.add('hidden');
+  }
+  el('btnTownAct').textContent = atExit && !best ? '离开小镇' : '交 谈';
+
+  syncSpecialBars();
+}
+
+/* 主动交互(F 键或点击) */
+function townInteract() {
+  if (G.state !== 'town') return;
+  if (T.near) { openNPCDialog(T.near); return; }
+  if (Math.hypot(T.x - T.exit.x, T.y - T.exit.y) < T.exit.r + T.r * 0.8) leaveTown();
+}
+
+/* 未完成任务时, 对话框里只显示进度 */
+function questProgressText(st) {
+  const q = st.quest;
+  const cur = Math.floor(Math.min(q.cur, q.goal));
+  switch (q.kind) {
+    case 'survive': return q.text + '：' + cur + ' / ' + q.goal + ' 秒';
+    case 'kill':    return q.text + '：' + cur + ' / ' + q.goal + ' 只';
+    case 'elite':   return q.text + '：' + cur + ' / ' + q.goal + ' 只';
+    case 'gold':    return q.text + '：' + cur + ' / ' + q.goal + ' 枚（本局）';
+    default:        return q.text;
+  }
+}
+
+let _dlgNpc = null;
+function openNPCDialog(npc) {
+  _dlgNpc = npc;
+  ensureSaveSlots();
+  const st = SAVE.quests[npc.id];
+  const title = el('dlgTitle'), body = el('dlgBody'), actions = el('dlgActions');
+  title.textContent = npc.emoji + ' ' + npc.name;
+  actions.innerHTML = '';
+
+  const addBtn = (label, cls, fn) => {
+    const b = document.createElement('button');
+    b.className = 'btn' + (cls ? ' ' + cls : '');
+    b.textContent = label;
+    b.onclick = fn;
+    actions.appendChild(b);
+    return b;
+  };
+
+  if (!st) {
+    body.innerHTML = '<div class="dlgq">“' + npc.request + '”</div>' +
+      '<div class="dlgmeta">任务：' + npc.quest.text + ' ' + npc.quest.goal +
+      '　→　奖励：' + SPECIALS[npc.reward].icon + ' ' + SPECIALS[npc.reward].name + '</div>';
+    addBtn('接 下 委 托', 'primary', () => {
+      SAVE.quests[npc.id] = {
+        quest: {
+          kind: npc.quest.kind, goal: npc.quest.goal, cur: 0,
+          base: npc.quest.kind === 'survive' ? 0 : (npc.quest.kind === 'kill' ? G.kills : (npc.quest.kind === 'elite' ? G.diffCount : G.runGold)),
+        },
+        done: false, claimed: false,
+      };
+      writeSave();
+      toast('已接下 ' + npc.name + ' 的委托');
+      sfx('coin');
+      openNPCDialog(npc);
+    });
+  } else if (st.claimed) {
+    body.innerHTML = '<div class="dlgq">“' + npc.thanks + '”</div>' +
+      '<div class="dlgmeta">该委托已完成，' + SPECIALS[npc.reward].name + ' 已在你身上。</div>';
+  } else if (st.done) {
+    const sp = SPECIALS[npc.reward];
+    body.innerHTML = '<div class="dlgq">“' + npc.thanks + '”</div>' +
+      '<div class="dlgmeta">获得特殊能力：' + sp.icon + ' ' + sp.name +
+      '　' + (sp.passive ? '被动生效' : '冷却 ' + sp.cd + ' 秒') + '</div>';
+    addBtn('领 取 奖 励', 'primary', () => {
+      st.claimed = true;
+      SAVE.specials[npc.reward] = true;
+      writeSave();
+      P.specials = P.specials || {};
+      toast('✨ 获得特殊能力：' + sp.name);
+      sfx('mut');
+      syncSpecialBars();
+      openNPCDialog(npc);
+    });
+  } else {
+    body.innerHTML = '<div class="dlgq">“' + npc.request + '”</div>' +
+      '<div class="dlgmeta">' + questProgressText(st) + '</div>' +
+      '<div class="dlgmeta">提示：这条委托要回到荒野去完成。</div>';
+  }
+  addBtn('离 开', '', closeNPCDialog);
+  el('npcDlg').classList.remove('hidden');
+}
+
+function closeNPCDialog() {
+  _dlgNpc = null;
+  el('npcDlg').classList.add('hidden');
+  // 清掉按钮, 否则下次对话时旧按钮会残留在列表里(可能被误点)
+  el('dlgActions').innerHTML = '';
+  el('dlgBody').innerHTML = '';
+}
+
+/* ---------------- 特殊能力: 冷却与激活 ---------------- */
+function ownedSpecials() {
+  ensureSaveSlots();
+  return Object.keys(SPECIALS).filter(id => SAVE.specials[id]);
+}
+
+function getSpecial(id) {
+  const def = SPECIALS[id];
+  P.specials = P.specials || {};
+  if (!P.specials[id]) P.specials[id] = { cd: 0 };
+  return { def, st: P.specials[id] };
+}
+
+function useSpecial(id) {
+  if (G.state !== 'playing' || !P) return;
+  const def = SPECIALS[id];
+  if (!def || def.passive || !SAVE.specials[id]) return;
+  const { st } = getSpecial(id);
+  if (st.cd > 0) { toast(def.name + ' 冷却中 ' + st.cd.toFixed(1) + 's'); return; }
+  st.cd = def.cd * (1 - P.cdr);
+  if (def.activate) def.activate();
+}
+
+function updateSpecials(dt) {
+  if (!P) return;
+  ensureSaveSlots();
+  for (const id of Object.keys(SPECIALS)) {
+    const def = SPECIALS[id];
+    if (!SAVE.specials[id]) continue;
+    const { st } = getSpecial(id);
+    if (st.cd > 0) st.cd = Math.max(0, st.cd - dt);
+    if (def.update) def.update(dt);
+  }
+  // 翅膀/靴子的可见特效
+  if (P.wingT > 0) effects.push({ kind: 'ring', x: P.x, y: P.y, life: 0.25, max: 0.25, r: 26, col: '#8ab4ff' });
+  if (P.bootsT > 0) effects.push({ kind: 'ring', x: P.x, y: P.y, life: 0.25, max: 0.25, r: 30, col: '#ffd76a' });
+}
+
+/* 特殊能力条: 城镇顶栏与主地图 HUD 共用同一套渲染 */
+function syncSpecialBars() {
+  syncOneBar(el('townSkills'));
+  syncOneBar(el('hudSpecials'));
+}
+
+function syncOneBar(bar) {
+  if (!bar) return;
+  const owned = ownedSpecials();
+  const sig = owned.join(',') + '|' + (P && P.specials ? owned.map(id => {
+    const s = P.specials[id]; return s ? Math.ceil(s.cd * 10) : 0;
+  }).join(',') : '');
+  if (bar._sig === sig) return;
+  bar._sig = sig;
+  bar.innerHTML = '';
+  for (const id of owned) {
+    const def = SPECIALS[id];
+    const st = P && P.specials && P.specials[id] ? P.specials[id] : { cd: 0 };
+    const b = document.createElement('button');
+    b.className = 'spkey' + (def.passive ? ' passive' : '') + (st.cd > 0 ? ' cooling' : '');
+    b.innerHTML = def.icon + '<span class="k">' + def.key + '</span>' +
+      (st.cd > 0 ? '<span class="cd">' + Math.ceil(st.cd) + '</span>' : '');
+    if (!def.passive) b.onclick = () => useSpecial(id);
+    b.title = def.name + '：' + def.desc;
+    bar.appendChild(b);
+  }
+  if (!owned.length) bar.innerHTML = '<span class="spnone">还没有特殊能力 · 找镇上的人聊聊</span>';
+}
+
+/* ---------------- 城镇绘制 ---------------- */
+const townBuildings = [
+  { x: -175, y: -140, w: 74, h: 58, roof: '#7a4a3a', wall: '#c9a882', label: '猎' },
+  { x: 175, y: -140, w: 74, h: 58, roof: '#5a4a6a', wall: '#b9a2c9', label: '炉' },
+  { x: 195, y: 165, w: 66, h: 52, roof: '#3a5a6a', wall: '#a2c0c9', label: '驿' },
+  { x: -190, y: 170, w: 66, h: 52, roof: '#6a5a3a', wall: '#c9bb9a', label: '书' },
+  { x: 0, y: -195, w: 84, h: 60, roof: '#8a3a4a', wall: '#d9b0b8', label: '镇' },
+];
+
+function drawTown() {
+  const W2 = W / 2, H2 = H / 2;
+  ctx.fillStyle = '#1b2430';
+  ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(W2, H2);
+  ctx.translate(-T.x, -T.y);
+
+  // 地面
+  ctx.fillStyle = '#2f4a35';
+  ctx.fillRect(-400, -400, 800, 800);
+  // 石板路
+  ctx.fillStyle = '#4a4640';
+  ctx.fillRect(-46, -260, 92, 520);
+  ctx.fillRect(-260, -46, 520, 92);
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let i = -250; i < 250; i += 40) ctx.fillRect(-44, i, 88, 2);
+
+  // 围墙
+  ctx.strokeStyle = '#5b4a3a'; ctx.lineWidth = 10;
+  ctx.strokeRect(-232, -212, 464, 424);
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 3;
+  ctx.strokeRect(-232, -212, 464, 424);
+
+  // 建筑
+  for (const b of townBuildings) {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(b.x, b.y + b.h / 2 + 5, b.w * 0.5, 7, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = b.wall;
+    ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2 + 8, b.w, b.h - 8);
+    ctx.fillStyle = b.roof;
+    ctx.beginPath();
+    ctx.moveTo(b.x - b.w / 2 - 6, b.y - b.h / 2 + 10);
+    ctx.lineTo(b.x, b.y - b.h / 2 - 16);
+    ctx.lineTo(b.x + b.w / 2 + 6, b.y - b.h / 2 + 10);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,220,150,0.85)';
+    ctx.fillRect(b.x - 9, b.y + 2, 18, 16);
+    ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillText(b.label, b.x, b.y - b.h / 2 + 30);
+  }
+
+  // 出口(南门)
+  const pulse = 0.5 + Math.sin(T.anim * 3) * 0.5;
+  ctx.strokeStyle = 'rgba(120,220,255,' + (0.45 + pulse * 0.35) + ')';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(T.exit.x, T.exit.y, T.exit.r, 0, TAU); ctx.stroke();
+  ctx.fillStyle = 'rgba(120,220,255,' + (0.10 + pulse * 0.10) + ')';
+  ctx.beginPath(); ctx.arc(T.exit.x, T.exit.y, T.exit.r, 0, TAU); ctx.fill();
+  drawSprite('🚪', T.exit.x, T.exit.y, 34);
+  ctx.font = 'bold 11px system-ui'; ctx.fillStyle = '#b8e8ff';
+  ctx.fillText('离开小镇', T.exit.x, T.exit.y + T.exit.r + 12);
+
+  // NPC
+  for (const npc of NPCS) {
+    const st = townNpcState(npc);
+    const here = T.near === npc;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(npc.x, npc.y + 16, 11, 4, 0, 0, TAU); ctx.fill();
+    if (here) {
+      const pl = 0.5 + Math.sin(T.anim * 6) * 0.5;
+      ctx.strokeStyle = 'rgba(255,215,106,' + (0.5 + pl * 0.4) + ')'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(npc.x, npc.y, 27 + pl * 3, 0, TAU); ctx.stroke();
+    }
+    drawSprite(npc.emoji, npc.x, npc.y, 36);
+    // 任务状态气泡
+    let mark = null, col = '#ffd76a';
+    if (!st) mark = '❗';
+    else if (st.done && !st.claimed) { mark = '✅'; col = '#4ade80'; }
+    if (mark) {
+      ctx.font = 'bold 17px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.beginPath(); ctx.arc(npc.x + 20, npc.y - 22, 10, 0, TAU); ctx.fill();
+      ctx.fillStyle = col; ctx.fillText(mark, npc.x + 20, npc.y - 21);
+    }
+    ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3;
+    ctx.strokeText(npc.name, npc.x, npc.y + 30);
+    ctx.fillStyle = '#ffe9b0'; ctx.fillText(npc.name, npc.x, npc.y + 30);
+  }
+
+  // 玩家
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.beginPath(); ctx.ellipse(T.x, T.y + 16, 12, 4, 0, 0, TAU); ctx.fill();
+  drawSprite('🧙', T.x, T.y, 36);
+
+  ctx.restore();
+
+  // 标题条
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 15px system-ui';
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(W2 - 118, 14, 236, 30);
+  ctx.fillStyle = '#ffe9b0';
+  ctx.fillText('🌆 回声小镇 · 绝对安全', W2, 29);
+  ctx.font = '11px system-ui';
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillText('拖动屏幕移动　靠近 NPC 按 F 交谈　南门离开', W2, 54);
+}
+
+/* ---------------- 主地图上的黑洞绘制与指示 ---------------- */
+function drawBlackHole() {
+  if (!G.bh || !G.bh.portal) return;
+  const p = G.bh.portal;
+  const pulse = 0.5 + Math.sin(p.spin * 2.2) * 0.5;
+  const fading = p.life < 20 ? (0.35 + 0.65 * Math.abs(Math.sin(p.life * 3))) : 1;
+
+  ctx.save();
+  ctx.globalAlpha = fading;
+  // 引力涟漪
+  for (let i = 3; i >= 1; i--) {
+    ctx.strokeStyle = 'rgba(160,110,255,' + (0.10 + pulse * 0.10) * (4 - i) / 3 + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, BH_ENTER_RADIUS + i * 22 + pulse * 8, 0, TAU);
+    ctx.stroke();
+  }
+  // 事件视界
+  const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, BH_ENTER_RADIUS);
+  g.addColorStop(0, 'rgba(0,0,0,1)');
+  g.addColorStop(0.62, 'rgba(40,10,70,0.95)');
+  g.addColorStop(0.86, 'rgba(150,80,255,' + (0.55 + pulse * 0.3) + ')');
+  g.addColorStop(1, 'rgba(120,60,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(p.x, p.y, BH_ENTER_RADIUS, 0, TAU); ctx.fill();
+  // 吸积盘
+  ctx.strokeStyle = 'rgba(220,180,255,' + (0.5 + pulse * 0.4) + ')';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.ellipse(p.x, p.y, BH_ENTER_RADIUS * 1.5, BH_ENTER_RADIUS * 0.42, p.spin, 0, TAU);
+  ctx.stroke();
+  ctx.restore();
+
+  // 文字提示
+  ctx.save();
+  ctx.globalAlpha = fading;
+  ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;
+  const tip = '走进去 · ' + Math.ceil(p.life) + 's 后消散';
+  ctx.strokeText(tip, p.x, p.y + BH_ENTER_RADIUS + 20);
+  ctx.fillStyle = '#d9b8ff';
+  ctx.fillText(tip, p.x, p.y + BH_ENTER_RADIUS + 20);
+  ctx.restore();
+}
+
+/* 黑洞在屏幕外时, 边缘给出紫色箭头指示 */
+function drawBlackHoleIndicator() {
+  if (!G.bh || !G.bh.portal || !P) return;
+  const p = G.bh.portal;
+  const sx = p.x - P.x + W / 2, sy = p.y - P.y + H / 2;
+  const margin = 64;
+  if (sx > margin && sx < W - margin && sy > margin && sy < H - margin) return;
+  const cx = W / 2, cy = H / 2;
+  const a = Math.atan2(sy - cy, sx - cx);
+  const halfW = W / 2 - margin, halfH = H / 2 - margin;
+  const cosA = Math.cos(a), sinA = Math.sin(a);
+  const scale = Math.abs(cosA) * halfH > Math.abs(sinA) * halfW
+    ? Math.abs(halfW / (cosA || 1e-6)) : Math.abs(halfH / (sinA || 1e-6));
+  const ax = cx + cosA * scale, ay = cy + sinA * scale;
+  const pulse = 0.5 + Math.sin(G.time * 5) * 0.5;
+  ctx.save();
+  ctx.globalAlpha = 0.45 + pulse * 0.4;
+  ctx.translate(ax, ay); ctx.rotate(a);
+  ctx.shadowColor = '#a06eff'; ctx.shadowBlur = 14;
+  ctx.fillStyle = '#a06eff';
+  ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-9, -11); ctx.lineTo(-9, 11); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  const tx = ax - Math.cos(a) * 32, ty = ay - Math.sin(a) * 32;
+  ctx.save();
+  ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+  ctx.strokeText('黑洞', tx, ty);
+  ctx.fillStyle = '#d9b8ff'; ctx.fillText('黑洞', tx, ty);
+  ctx.restore();
+}
+
+/* ---------------- 城镇里的特殊能力条刷新(有冷却时每帧更新) ---------------- */
+function updateHudSpecials() {
+  if (G.state === 'town' || G.state === 'playing') syncSpecialBars();
+}
