@@ -48,6 +48,9 @@ python -m http.server 8000
 │   ├── render.js       # 全部 Canvas 绘制
 │   ├── ui.js           # DOM 界面交互与主循环
 │   └── blackhole.js    # 黑洞随机事件 + 回声小镇 + 特殊能力（手写模块）
+├── versions/
+│   ├── README.md       # 单文件版本归档说明
+│   └── game3.2.html    # v1.5.3 的原始单文件（拆分来源）
 └── tools/
     ├── split.py        # 从单文件版本拆分出 index.html / css / js
     ├── verify.py       # 校验拆分没有丢代码（逐行比对 + 语法检查）
