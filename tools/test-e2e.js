@@ -90,13 +90,25 @@ const sb = { console, Math, Date, JSON, Object, Array, String, Number, Boolean, 
   addEventListener(ev, fn) { (winListeners[ev] = winListeners[ev] || []).push(fn); },
   removeEventListener() {} };
 sb.window = sb; sb.globalThis = sb; sb.self = sb;
+/* 先按 index.html 里写死的 class 初始化元素, 这样"初始状态"才和浏览器一致
+   (例如 #hud / #townBar / #btnTownAct 一开始就带 hidden) */
+for (const m of html.matchAll(/<[a-z]+[^>]*\bid="([^"]+)"[^>]*>/g)) {
+  const tag = m[0];
+  const id = m[1];
+  const cls = (tag.match(/class="([^"]*)"/) || [, ''])[1];
+  if (!elements.has(id)) elements.set(id, makeEl(id));
+  const e = elements.get(id);
+  cls.split(/\s+/).filter(Boolean).forEach(c => e.classList.add(c));
+}
+
 const ctx = vm.createContext(sb);
 vm.runInContext(order.map(n => fs.readFileSync(path.join(ROOT, 'js', n), 'utf8')).join('\n;\n'), ctx, { filename: 'bundle.js' });
 
 const g = vm.runInContext(`({
   get G(){ return G; }, get P(){ return P; }, get SAVE(){ return SAVE; }, set SAVE(v){ SAVE = v; },
   SPECIALS, NPCS, T, startGame, el,
-  get enemies(){ return enemies; }, get input(){ return input; }
+  get enemies(){ return enemies; }, get input(){ return input; },
+  get dbgBH(){ return window.dbgBH; }, get dbgGoto(){ return window.dbgGoto; }
 })`, ctx);
 
 /* ---------------- 驱动工具 ---------------- */
@@ -141,8 +153,15 @@ console.log('=== 端到端: 全部通过主循环与真实事件驱动 ===');
 g.SAVE = { gold: 0, up: { hp: 0, spd: 0, dmg: 0, cdr: 0, size: 0 }, best: 0, pets: [], selected: [], specials: {}, quests: {} };
 g.startGame('endless', []);
 ok(g.G.state === 'playing', '开局进入战斗状态');
+// 回归: 小镇的"交谈"按钮不能在战斗界面出现(曾直接盖住技能栏)
+ok(elements.get('btnTownAct').classList.contains('hidden'),
+   '"交谈"按钮在战斗界面是隐藏的');
+ok(!elements.get('ui').classList.contains('town'),
+   '#ui 没有 town 类(技能栏保持原位)');
 run(500);
 ok(g.G.time > 0.4, '主循环在推进时间: ' + g.G.time.toFixed(2) + 's');
+ok(elements.get('btnTownAct').classList.contains('hidden'),
+   '跑了 8 秒之后"交谈"按钮依然是隐藏的');
 ok(g.enemies.length > 0, '主循环在刷怪: ' + g.enemies.length + ' 只');
 ok(drawStats.sprite > 0 && drawStats.fill > 0,
    '主循环在渲染(精灵 ' + drawStats.sprite + ' / 填充 ' + drawStats.fill + ')');
@@ -161,6 +180,8 @@ run(50);
 ok(g.G.state === 'town', '走进黑洞后进入小镇 (state=' + g.G.state + ')');
 ok(!elements.get('townBar').classList.contains('hidden'), '小镇顶栏已显示');
 ok(elements.get('hud').classList.contains('hidden'), '战斗 HUD 已隐藏');
+ok(!elements.get('btnTownAct').classList.contains('hidden'), '城镇里"交谈"按钮显示出来');
+ok(elements.get('ui').classList.contains('town'), '城镇里 #ui 带上 town 类(技能栏上移让位)');
 const spritesBefore = drawStats.sprite;
 run(200);
 ok(drawStats.sprite > spritesBefore, '小镇画面在渲染(精灵 +' + (drawStats.sprite - spritesBefore) + ')');
@@ -197,6 +218,10 @@ if (g.G.state !== 'playing') {
 }
 ok(g.G.state === 'playing', '从南门按 F 回到荒野 (state=' + g.G.state + ')');
 ok(elements.get('townBar').classList.contains('hidden'), '小镇顶栏已收起');
+ok(elements.get('btnTownAct').classList.contains('hidden'),
+   '回到荒野后"交谈"按钮已收起(不再挡住技能栏)');
+ok(!elements.get('ui').classList.contains('town'), 'town 类已移除, 技能栏回到原位');
+ok(elements.get('npcDlg').classList.contains('hidden'), 'NPC 对话框已关闭');
 ok(!elements.get('hud').classList.contains('hidden'), '战斗 HUD 已恢复');
 
 /* ---------- 6. 回荒野推进任务进度 ---------- */
@@ -262,6 +287,30 @@ elements.get('btnResume').onclick();
 ok(g.G.state === 'playing', '点了"继续游戏"后恢复战斗');
 run(300);
 ok(g.G.time > tAtPause, '恢复后时间继续推进: ' + g.G.time.toFixed(2) + 's');
+
+/* ---------- 11. 控制台调试入口(dbqBH / dbgGoto)可用 ---------- */
+ok(typeof g.dbgBH === 'function' && typeof g.dbgGoto === 'function',
+   'window.dbgBH / window.dbgGoto 已挂载');
+g.G.bh.portal = null;
+g.G.bh.timer = 9999;
+const r1 = g.dbgBH();
+ok(g.G.bh.timer === 0 && g.G.bh.announced === true,
+   'dbgBH() 让主循环立刻生成黑洞 (' + r1 + ')');
+run(100);
+ok(!!g.G.bh.portal, '主循环真的把黑洞生成出来了');
+g.G.bh.portal = null;
+g.G.bh.timer = 9999;
+g.dbgGoto();
+run(100);                       // 等 setTimeout 里的传送回调 + 主循环吸入
+// 传送到黑洞上之后主循环会立刻吸入 -> 直接进城, 黑洞随之被清掉
+ok(g.G.state === 'town', 'dbgGoto() 一步进入小镇 (state=' + g.G.state + ')');
+ok(g.G.bh.portal === null, '进入小镇后黑洞被清除(符合预期)');
+// 再手动验一次"送到黑洞旁边"的距离
+g.G.bh.timer = 9999;
+g.G.bh.portal = { x: g.P.x + 900, y: g.P.y, life: 150, spin: 0 };
+g.dbgGoto();
+run(100);
+ok(g.G.state === 'town', 'dbgGoto() 再次成功进城');
 
 console.log('');
 console.log(fails === 0 ? '结论: 端到端链路全部通过 ✔' : '结论: ' + fails + ' 项失败 ✘');

@@ -98,7 +98,7 @@ TOWN_HTML = """<div id="townBar" class="hidden">
     <div id="townSkills"></div>
   </div>
   <div id="townPrompt" class="hidden"></div>
-  <button id="btnTownAct" class="town-act">交 谈</button>
+  <button id="btnTownAct" class="town-act hidden">交 谈</button>
   <div class="veil hidden" id="npcDlg">
     <div class="card">
       <div class="title" id="dlgTitle" style="font-size:20px"></div>
@@ -118,28 +118,33 @@ TOWN_CSS = """
   .town-name{font-size:14px;font-weight:800;color:#ffe9b0;text-shadow:0 2px 8px #000;letter-spacing:1px}
   .town-note{font-size:10.5px;opacity:.6}
   #townSkills,#hudSpecials{display:flex;gap:6px;pointer-events:auto;margin-left:auto}
-  #hudSpecials{margin-left:0;justify-content:flex-end;margin-top:5px}
-  .spkey{position:relative;width:38px;height:38px;border-radius:10px;cursor:pointer;
+  #hudSpecials{margin-left:0;justify-content:flex-end;margin-top:5px;min-height:0}
+  .spkey{position:relative;width:34px;height:34px;border-radius:9px;cursor:pointer;
     background:rgba(20,20,36,.85);border:1px solid rgba(255,255,255,.18);color:#e8e8f0;
-    font-size:18px;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;
+    font-size:16px;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;
     transition:.15s;padding:0}
   .spkey:hover{background:rgba(255,255,255,.16)}
-  .spkey .k{position:absolute;bottom:1px;right:3px;font-size:9px;font-weight:700;color:#ffd76a}
+  .spkey .k{position:absolute;bottom:0;right:2px;font-size:8.5px;font-weight:700;color:#ffd76a}
   .spkey .cd{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    background:rgba(0,0,0,.62);border-radius:9px;font-size:13px;font-weight:800;color:#ffd76a}
+    background:rgba(0,0,0,.62);border-radius:8px;font-size:12px;font-weight:800;color:#ffd76a}
   .spkey.cooling{border-color:rgba(255,215,106,.5)}
   .spkey.passive{border-color:rgba(126,247,200,.5);opacity:.92}
   .spnone{font-size:10.5px;opacity:.45;align-self:center}
+  /* 城镇里技能栏上移, 给底部的"交谈"按钮让位 */
+  #ui.town .skillbar{bottom:calc(88px + env(safe-area-inset-bottom))}
+  #ui.town .petbar{bottom:calc(140px + env(safe-area-inset-bottom))}
   #townPrompt{position:absolute;left:50%;transform:translateX(-50%);
-    bottom:calc(74px + env(safe-area-inset-bottom));padding:8px 14px;border-radius:10px;
+    bottom:calc(144px + env(safe-area-inset-bottom));padding:8px 14px;border-radius:10px;
     background:rgba(20,20,36,.9);border:1px solid rgba(255,215,106,.45);color:#ffe9b0;
     font-size:12.5px;font-weight:700;white-space:nowrap;pointer-events:none;z-index:4}
   #townPrompt.hidden{display:none!important}
   .town-act{position:absolute;left:50%;transform:translateX(-50%);
-    bottom:calc(22px + env(safe-area-inset-bottom));padding:11px 26px;border-radius:12px;
+    bottom:calc(20px + env(safe-area-inset-bottom));
+    padding:12px 30px;border-radius:13px;
     background:linear-gradient(90deg,#4f46e5,#7c3aed);border:1px solid #8b5cf6;color:#fff;
-    font-size:14px;font-weight:700;letter-spacing:2px;font-family:inherit;cursor:pointer;
-    pointer-events:auto;z-index:4;box-shadow:0 6px 22px rgba(0,0,0,.5)}
+    font-size:15px;font-weight:700;letter-spacing:2px;font-family:inherit;cursor:pointer;
+    pointer-events:auto;z-index:6;box-shadow:0 6px 22px rgba(0,0,0,.55)}
+  .town-act.hidden{display:none!important}
   .dlg{text-align:left;font-size:12.5px;line-height:1.8;margin:2px 0 6px}
   .dlg .dlgq{background:rgba(255,255,255,.05);border-left:3px solid #8b5cf6;
     border-radius:0 10px 10px 0;padding:10px 12px;color:#dcdcf0}
@@ -294,12 +299,16 @@ PATCHES = {
          "  if (typeof closeNPCDialog === 'function') closeNPCDialog();\n"
          "  el('townBar').classList.add('hidden');\n"
          "  el('townPrompt').classList.add('hidden');\n"
+         "  el('btnTownAct').classList.add('hidden');\n"
+         "  el('ui').classList.remove('town');\n"
          "  el('pauseVeil').classList.add('hidden'); el('resetVeil').classList.add('hidden');"),
         ("function doResetSave() {",
          "function doResetSave() {\n"
          "  if (typeof closeNPCDialog === 'function') closeNPCDialog();\n"
          "  el('townBar').classList.add('hidden');\n"
-         "  el('townPrompt').classList.add('hidden');"),
+         "  el('townPrompt').classList.add('hidden');\n"
+         "  el('btnTownAct').classList.add('hidden');\n"
+         "  el('ui').classList.remove('town');"),
         # 5b) startGame 里初始化特殊能力计时(实现在 blackhole.js)
         ("  const starters = ['homing', 'sword', 'lightning', 'bomb'];",
          "  P.wingT = 0; P.bootsT = 0; P.specials = {};   // 特殊能力计时\n"

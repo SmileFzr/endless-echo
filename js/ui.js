@@ -212,6 +212,8 @@ function backToMenu() {
   if (typeof closeNPCDialog === 'function') closeNPCDialog();
   el('townBar').classList.add('hidden');
   el('townPrompt').classList.add('hidden');
+  el('btnTownAct').classList.add('hidden');
+  el('ui').classList.remove('town');
   el('pauseVeil').classList.add('hidden'); el('resetVeil').classList.add('hidden');
   el('over').classList.add('hidden');
   el('hud').classList.add('hidden'); el('menu').classList.remove('hidden');
@@ -223,6 +225,8 @@ function doResetSave() {
   if (typeof closeNPCDialog === 'function') closeNPCDialog();
   el('townBar').classList.add('hidden');
   el('townPrompt').classList.add('hidden');
+  el('btnTownAct').classList.add('hidden');
+  el('ui').classList.remove('town');
   // 特殊能力(S.D. 的城镇奖励)与任务进度保留, 不被重置存档清掉
   SAVE = { gold:0, up:{ hp:0, spd:0, dmg:0, cdr:0, size:0 }, best:0, pets:[], selected:[],
            specials: (SAVE && SAVE.specials) || {}, quests: (SAVE && SAVE.quests) || {} };

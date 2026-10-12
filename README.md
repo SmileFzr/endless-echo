@@ -109,9 +109,30 @@ python tools/split.py          # 重新生成 index.html / css/ / js/（含所�
 python tools/verify.py         # 校验：产物与期望一致、源码一行不丢、node --check 通过
 node tools/smoke-test.js       # 运行时冒烟测试
 node tools/test-blackhole.js   # 黑洞/小镇/特殊能力回归测试
+node tools/test-e2e.js         # 端到端：主循环 + 真实事件驱动整条链路
 node tools/test-visibility.js  # 切后台暂停回归测试
 node tools/stress-test.js      # 全技能 × 全变异压力测试
 node tools/audit-numbers.js    # 数值加成审计
+node tools/check-ids.js        # DOM id 一致性
+node tools/check-town-reach.js # 小镇 NPC / 出口可达性
+```
+
+### 试玩时的控制台快捷命令
+
+进入游戏（点了「无尽模式」）后按 F12 打开控制台，可以直接用这些命令跳过前期：
+
+```js
+dbgBH()        // 立刻召唤一个黑洞（跳过"3 技能且 1 个到 3 级"的条件）
+dbgGoto()      // 传送到黑洞旁边，一步进入小镇
+dbgTown()      // 直接进城（不经过黑洞）
+dbgSpecials()  // 解锁全部特殊能力，之后按 1 / 2 就能用
+```
+
+也可以手动构造条件：
+
+```js
+P.skills.push({id:'sword',lv:3,mut:null,cd:0}, {id:'bomb',lv:3,mut:null,cd:0});
+G.bh.timer = 1;   // 1 秒后刷出黑洞
 ```
 
 `tools/split.py` 顶部的 `SRC` 指向单文件版本 `game3.2.html`，需要按你的实际路径修改。

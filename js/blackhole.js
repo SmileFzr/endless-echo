@@ -190,6 +190,8 @@ function enterTown() {
   G.state = 'town';
   el('hud').classList.add('hidden');
   el('townBar').classList.remove('hidden');
+  el('btnTownAct').classList.remove('hidden');   // 城镇里才显示"交谈"按钮
+  el('ui').classList.add('town');                // 让技能栏上移, 给按钮让位
   sfx('shop');
   toast('🌆 回声小镇 · 这里很安全');
   syncSpecialBars();
@@ -198,6 +200,9 @@ function enterTown() {
 function leaveTown() {
   G.state = 'playing';
   el('townBar').classList.add('hidden');
+  el('townPrompt').classList.add('hidden');
+  el('btnTownAct').classList.add('hidden');      // 回荒野必须收起, 否则挡住技能栏
+  el('ui').classList.remove('town');
   closeNPCDialog();
   el('hud').classList.remove('hidden');
   // 从黑洞旁边出来, 避免立刻又被吸进去
@@ -268,7 +273,7 @@ function updateTown(dt) {
   } else {
     prompt.classList.add('hidden');
   }
-  el('btnTownAct').textContent = atExit && !best ? '离开小镇' : '交 谈';
+  el('btnTownAct').textContent = (atExit && !best) ? '离 开 小 镇' : '交 谈';
 
   syncSpecialBars();
 }
@@ -585,7 +590,7 @@ function drawBlackHole() {
   ctx.restore();
 }
 
-/* 黑洞在屏幕外时, 边缘给出紫色箭头指示 */
+/* 黑洞在屏幕外时, 边缘给出醒目的紫色指引(比精英怪的红色箭头更大更亮) */
 function drawBlackHoleIndicator() {
   if (!G.bh || !G.bh.portal || !P) return;
   const p = G.bh.portal;
@@ -600,23 +605,89 @@ function drawBlackHoleIndicator() {
     ? Math.abs(halfW / (cosA || 1e-6)) : Math.abs(halfH / (sinA || 1e-6));
   const ax = cx + cosA * scale, ay = cy + sinA * scale;
   const pulse = 0.5 + Math.sin(G.time * 5) * 0.5;
+  const dist = Math.round(Math.hypot(p.x - P.x, p.y - P.y) / 10);
+
   ctx.save();
-  ctx.globalAlpha = 0.45 + pulse * 0.4;
-  ctx.translate(ax, ay); ctx.rotate(a);
-  ctx.shadowColor = '#a06eff'; ctx.shadowBlur = 14;
-  ctx.fillStyle = '#a06eff';
-  ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-9, -11); ctx.lineTo(-9, 11); ctx.closePath(); ctx.fill();
+  // 脉冲光晕, 让它一眼就能看见
+  ctx.globalAlpha = 0.22 + pulse * 0.22;
+  const halo = ctx.createRadialGradient(ax, ay, 0, ax, ay, 46 + pulse * 10);
+  halo.addColorStop(0, 'rgba(190,130,255,0.95)');
+  halo.addColorStop(1, 'rgba(160,110,255,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(ax, ay, 46 + pulse * 10, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
   ctx.restore();
-  const tx = ax - Math.cos(a) * 32, ty = ay - Math.sin(a) * 32;
+
+  // 箭头(比精英怪那支更大)
   ctx.save();
-  ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+  ctx.globalAlpha = 0.7 + pulse * 0.3;
+  ctx.translate(ax, ay); ctx.rotate(a);
+  ctx.shadowColor = '#c79bff'; ctx.shadowBlur = 18;
+  ctx.fillStyle = '#c79bff';
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(24, 0); ctx.lineTo(-12, -15); ctx.lineTo(-12, 15); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+
+  // 标签: 黑洞 + 距离(往屏幕内侧偏移, 避免被切掉)
+  const tx = ax - Math.cos(a) * 44, ty = ay - Math.sin(a) * 44;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 14px system-ui';
+  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.92)';
   ctx.strokeText('黑洞', tx, ty);
-  ctx.fillStyle = '#d9b8ff'; ctx.fillText('黑洞', tx, ty);
+  ctx.fillStyle = pulse > 0.5 ? '#e8d4ff' : '#c79bff';
+  ctx.fillText('黑洞', tx, ty);
+  ctx.font = 'bold 11px system-ui'; ctx.lineWidth = 3;
+  ctx.strokeText(dist + 'm', tx, ty + 16);
+  ctx.fillStyle = '#d9b8ff';
+  ctx.fillText(dist + 'm', tx, ty + 16);
   ctx.restore();
 }
 
 /* ---------------- 城镇里的特殊能力条刷新(有冷却时每帧更新) ---------------- */
 function updateHudSpecials() {
   if (G.state === 'town' || G.state === 'playing') syncSpecialBars();
+}
+
+/* ============================================================
+   调试辅助(仅供试玩时在浏览器控制台使用, 不影响正常玩法)
+   ============================================================ */
+
+/* 立刻召唤一个黑洞(走正常生成流程, 距离/寿命与正式玩法一致) */
+function debugSpawnBlackHole() {
+  if (!P) { console.warn('先点「无尽模式」开始游戏, 再执行这条命令'); return null; }
+  G.bh = G.bh || { timer: null, portal: null, townReturn: false, announced: false };
+  G.bh.announced = true;   // 跳过"3 个技能且 1 个到 3 级"的条件
+  G.bh.portal = null;      // 清掉旧的, 让主循环立刻重新生成
+  G.bh.timer = 0;
+  toast('🕳 黑洞已召唤 · 朝紫色箭头走过去');
+  return '下一帧会在你附近生成黑洞';
+}
+
+/* 直接传送到黑洞旁边(等它生成后一步进城) */
+function debugGotoBlackHole() {
+  if (!P) { console.warn('先点「无尽模式」开始游戏, 再执行这条命令'); return null; }
+  if (!G.bh || !G.bh.portal) debugSpawnBlackHole();
+  let tries = 0;
+  const wait = () => {
+    if (G.bh && G.bh.portal) { P.x = G.bh.portal.x; P.y = G.bh.portal.y; return; }
+    if (++tries < 30) setTimeout(wait, 16);
+  };
+  wait();
+  return '正在传送到黑洞…';
+}
+
+/* 把黑洞/小镇相关的调试入口挂到 window, 方便控制台调用 */
+if (typeof window !== 'undefined') {
+  window.dbgBH = debugSpawnBlackHole;      // 召唤黑洞
+  window.dbgGoto = debugGotoBlackHole;     // 直接传送到黑洞
+  window.dbgTown = () => { if (P) enterTown(); };   // 直接进城
+  window.dbgSpecials = () => {             // 白送全部特殊能力
+    ensureSaveSlots();
+    for (const id of Object.keys(SPECIALS)) SAVE.specials[id] = true;
+    if (P) { P.specials = {}; for (const id of Object.keys(SPECIALS)) P.specials[id] = { cd: 0 }; }
+    syncSpecialBars();
+    toast('已解锁全部特殊能力');
+  };
 }
