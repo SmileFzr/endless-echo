@@ -7,7 +7,9 @@
 
 ## 在线试玩
 
-部署到 GitHub Pages 后访问：`https://<你的用户名>.github.io/<仓库名>/`
+**https://smilefzr.github.io/endless-echo/**
+
+手机浏览器打开后可"添加到主屏幕"，全屏当 App 玩。无需登录、无需安装。
 
 ## 本地运行
 
