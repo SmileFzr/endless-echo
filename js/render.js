@@ -3,6 +3,16 @@
    无尽回响 Endless Echo
    ============================================================ */
 
+/* canvas 字体助手: 带中文字体回退, 并缓存上一次的值。
+   system-ui 在 Windows Chrome 上会映射到 Segoe UI, 没有中文字形,
+   导致 canvas 上的中文渲染成方块。 */
+const CANVAS_FONT_FAMILY = "'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei', system-ui, sans-serif";
+let _lastFont = '';
+function fnt(px, weight) {
+  const f = (weight ? weight + ' ' : '') + px + 'px ' + CANVAS_FONT_FAMILY;
+  if (f !== _lastFont) { ctx.font = f; _lastFont = f; }
+  return f;
+}
 function render() {
   if (G.state === 'town') { drawTown(); return; }
   ctx.fillStyle = '#07070e';
@@ -114,7 +124,7 @@ function drawEnemies() {
         ctx.strokeStyle = grad; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
         ctx.lineCap = 'butt';
       }
-      ctx.font = 'bold 11px system-ui';
+      ctx.font = fnt(11, 'bold');
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const hpText = Math.ceil(e.hp) + ' / ' + Math.round(e.maxHp);
       ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.lineWidth = 3;
@@ -187,7 +197,7 @@ function drawEliteIndicator() {
     const markR = elite.r + 20 + pulse * 7;
     ctx.beginPath(); ctx.arc(sx, sy, markR, 0, TAU); ctx.stroke();
     ctx.globalAlpha = 0.85;
-    ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = fnt(13, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ff4d5e'; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;
     // 名字放到圆环下方, 避开圆环上方的血量数字
     const labelY = sy + elite.r + 34;
@@ -218,11 +228,11 @@ function drawEliteIndicator() {
   ctx.restore();
   const tx = ax - Math.cos(angle) * 34, ty = ay - Math.sin(angle) * 34;
   ctx.save();
-  ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = fnt(13, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.9)';
   ctx.strokeText('精英', tx, ty);
   ctx.fillStyle = '#ff4d5e'; ctx.fillText('精英', tx, ty);
-  ctx.font = 'bold 10px system-ui'; ctx.lineWidth = 3;
+  ctx.font = fnt(10, 'bold'); ctx.lineWidth = 3;
   ctx.strokeText(dist + 'm', tx, ty + 14);
   ctx.fillStyle = '#ffb0b8'; ctx.fillText(dist + 'm', tx, ty + 14);
   ctx.restore();
@@ -285,7 +295,7 @@ function drawTexts() {
   for (const t of texts) {
     const a = clamp(t.life / t.max, 0, 1);
     ctx.globalAlpha = a;
-    ctx.font = t.crit ? 'bold 17px system-ui' : 'bold 13px system-ui';
+    ctx.font = t.crit ? fnt(17, 'bold') : fnt(13, 'bold');
     ctx.fillStyle = t.crit ? '#ffd76a' : '#ffffff';
     ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3;
     ctx.strokeText(t.t, t.x, t.y); ctx.fillText(t.t, t.x, t.y);

@@ -41,6 +41,51 @@ const users = files.filter(f => GOOD.test(fs.readFileSync(path.join(jsDir, f), '
 console.log('');
 console.log('采用安全写法的文件: ' + (users.length ? users.join(', ') : '(无)'));
 
+// ---------------------------------------------------------------
+// 跨文件重复的顶层 const/let 声明
+// 这些文件都是"经典 script", 共享同一个全局作用域, 重复声明会直接抛错:
+//   Uncaught SyntaxError: Identifier 'X' has already been declared
+// ---------------------------------------------------------------
+function topLevelDecls(text) {
+  const out = [];
+  const lines = text.split('\n');
+  let depth = 0;
+  for (const raw of lines) {
+    const code = raw.replace(/\/\/.*$/, '').replace(/'(?:\\.|[^'\\])*'/g, "''")
+                    .replace(/"(?:\\.|[^"\\])*"/g, '""').replace(/`(?:\\.|[^`\\])*`/g, '``');
+    if (depth === 0) {
+      // 顶层: 行首(可含少量缩进)的 const/let/var 声明
+      const m = code.match(/^\s{0,2}(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=/);
+      if (m) out.push({ name: m[1], line: raw });
+    }
+    for (const ch of code) {
+      if (ch === '{') depth++;
+      else if (ch === '}') depth = Math.max(0, depth - 1);
+    }
+  }
+  return out;
+}
+
+const decls = new Map();          // 名字 -> [{file, line}]
+for (const f of files) {
+  for (const d of topLevelDecls(fs.readFileSync(path.join(jsDir, f), 'utf8'))) {
+    if (!decls.has(d.name)) decls.set(d.name, []);
+    decls.get(d.name).push({ file: f, line: d.line });
+  }
+}
+const clashes = [...decls.entries()].filter(([, v]) => v.length > 1);
 console.log('');
-console.log(bad.length === 0 ? '结论: 检查通过' : '结论: 存在 ' + bad.length + ' 处隐患');
-process.exitCode = bad.length ? 1 : 0;
+console.log('=== 跨文件重复的顶层 const/let 声明 ===');
+if (!clashes.length) {
+  console.log('   ✔ 没有重复, 加载顺序安全');
+} else {
+  console.log('   ✘ 发现 ' + clashes.length + ' 个重复标识符(经典 script 共享作用域, 会直接报错):');
+  for (const [name, v] of clashes) {
+    console.log('     ' + name + ':  ' + v.map(x => x.file + '  ' + x.line.trim().slice(0, 60)).join('   |   '));
+  }
+}
+
+const problems = bad.length + clashes.length;
+console.log('');
+console.log(problems === 0 ? '结论: 检查通过' : '结论: 存在 ' + problems + ' 项隐患');
+process.exitCode = problems ? 1 : 0;

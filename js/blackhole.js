@@ -246,11 +246,11 @@ function drawBhBanner() {
   ctx.shadowBlur = 0;
 
   // 标题
-  ctx.font = 'bold 17px system-ui';
+  ctx.font = fnt(17, 'bold');
   ctx.fillStyle = '#e8d4ff';
   ctx.fillText('🕳  ' + b.title, cx, cy - 14);
   // 副标题
-  ctx.font = '12.5px system-ui';
+  ctx.font = fnt(12.5);
   ctx.fillStyle = 'rgba(220,200,255,0.78)';
   ctx.fillText(b.sub + '　·　' + Math.ceil(b.life) + ' 秒后消散', cx, cy + 14);
   ctx.restore();
@@ -634,7 +634,7 @@ function drawTown() {
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = 'rgba(255,220,150,0.85)';
     ctx.fillRect(b.x - 9, b.y + 2, 18, 16);
-    ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = fnt(13, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillText(b.label, b.x, b.y - b.h / 2 + 30);
   }
@@ -647,7 +647,7 @@ function drawTown() {
   ctx.fillStyle = 'rgba(120,220,255,' + (0.10 + pulse * 0.10) + ')';
   ctx.beginPath(); ctx.arc(T.exit.x, T.exit.y, T.exit.r, 0, TAU); ctx.fill();
   drawSprite('🚪', T.exit.x, T.exit.y, 34);
-  ctx.font = 'bold 11px system-ui'; ctx.fillStyle = '#b8e8ff';
+  ctx.font = fnt(11, 'bold'); ctx.fillStyle = '#b8e8ff';
   ctx.fillText('离开小镇', T.exit.x, T.exit.y + T.exit.r + 12);
 
   // NPC
@@ -667,12 +667,12 @@ function drawTown() {
     if (!st) mark = '❗';
     else if (st.done && !st.claimed) { mark = '✅'; col = '#4ade80'; }
     if (mark) {
-      ctx.font = 'bold 17px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = fnt(17, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.beginPath(); ctx.arc(npc.x + 20, npc.y - 22, 10, 0, TAU); ctx.fill();
       ctx.fillStyle = col; ctx.fillText(mark, npc.x + 20, npc.y - 21);
     }
-    ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = fnt(11, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3;
     ctx.strokeText(npc.name, npc.x, npc.y + 30);
     ctx.fillStyle = '#ffe9b0'; ctx.fillText(npc.name, npc.x, npc.y + 30);
@@ -688,12 +688,12 @@ function drawTown() {
   // 标题条(画在屏幕坐标里, 不随城镇缩放变化)
   const cx = W / 2;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = 'bold 15px system-ui';
+  ctx.font = fnt(15, 'bold');
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
   ctx.fillRect(cx - 118, 14, 236, 30);
   ctx.fillStyle = '#ffe9b0';
   ctx.fillText('🌆 回声小镇 · 绝对安全', cx, 29);
-  ctx.font = '11px system-ui';
+  ctx.font = fnt(11);
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.fillText('拖动屏幕移动　靠近 NPC 按 F 交谈　南门离开', cx, 54);
 }
@@ -734,7 +734,7 @@ function drawBlackHole() {
   // 文字提示
   ctx.save();
   ctx.globalAlpha = fading;
-  ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = fnt(12, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;
   const tip = '走进去 · ' + Math.ceil(p.life) + 's 后消散';
   ctx.strokeText(tip, p.x, p.y + BH_ENTER_RADIUS + 20);
@@ -789,12 +789,12 @@ function drawBlackHoleIndicator() {
   const tx = ax - Math.cos(a) * 44, ty = ay - Math.sin(a) * 44;
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = 'bold 14px system-ui';
+  ctx.font = fnt(14, 'bold');
   ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.92)';
   ctx.strokeText('黑洞', tx, ty);
   ctx.fillStyle = pulse > 0.5 ? '#e8d4ff' : '#c79bff';
   ctx.fillText('黑洞', tx, ty);
-  ctx.font = 'bold 11px system-ui'; ctx.lineWidth = 3;
+  ctx.font = fnt(11, 'bold'); ctx.lineWidth = 3;
   ctx.strokeText(dist + 'm', tx, ty + 16);
   ctx.fillStyle = '#d9b8ff';
   ctx.fillText(dist + 'm', tx, ty + 16);
@@ -958,6 +958,9 @@ function codexDetail(kind, id) {
       '</div>';
   }
 }
+
+/* 说明: canvas 字体助手 fnt() / CANVAS_FONT_FAMILY 由 js/render.js 提供,
+   本文件直接用即可(不再重复声明, 否则 const 重复声明会报错)。 */
 
 /* ============================================================
    精英怪特性 / elite traits

@@ -259,7 +259,7 @@ PATCHES = {
          '        <div class="hudbtns">'),
         # 主菜单显示版本号(以后改版本只需改这里)
         ('<button class="btn tiny" id="btnResetFromMenu">',
-         '<div class="ver" id="verTxt">v1.7.1</div>\n'
+         '<div class="ver" id="verTxt">v1.7.2</div>\n'
          '      <button class="btn tiny" id="btnResetFromMenu">'),
         # 主菜单加"查看图鉴"按钮
         ('<button class="btn" id="btnHelp">玩 法 说 明</button>',
@@ -578,6 +578,19 @@ PATCHES = {
          "    // 名字放到圆环下方, 避开圆环上方的血量数字\n"
          "    const labelY = sy + elite.r + 34;\n"
          "    ctx.strokeText('精英', sx, labelY); ctx.fillText('精英', sx, labelY);"),
+        # 15) canvas 字体加中文字体回退(见 fnt 助手)
+        ("function render() {\n  if (G.state === 'town') { drawTown(); return; }",
+         '/* canvas 字体助手: 带中文字体回退, 并缓存上一次的值。\n   system-ui 在 Windows Chrome 上会映射到 Segoe UI, 没有中文字形,\n   导致 canvas 上的中文渲染成方块。 */\nconst CANVAS_FONT_FAMILY = "\'Microsoft YaHei\', \'PingFang SC\', \'Hiragino Sans GB\', \'Noto Sans CJK SC\', \'WenQuanYi Micro Hei\', system-ui, sans-serif";\nlet _lastFont = \'\';\nfunction fnt(px, weight) {\n  const f = (weight ? weight + \' \' : \'\') + px + \'px \' + CANVAS_FONT_FAMILY;\n  if (f !== _lastFont) { ctx.font = f; _lastFont = f; }\n  return f;\n}\nfunction render() {\n  if (G.state === \'town\') { drawTown(); return; }'),
+        ("      ctx.font = 'bold 11px system-ui';\n      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';\n      const hpText",
+         "      ctx.font = fnt(11, 'bold');\n      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';\n      const hpText"),
+        ("    ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';\n    ctx.fillStyle = '#ff4d5e'; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;\n    // 名字放到圆环下方",
+         "    ctx.font = fnt(13, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';\n    ctx.fillStyle = '#ff4d5e'; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;\n    // 名字放到圆环下方"),
+        ("  ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';\n  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.9)';",
+         "  ctx.font = fnt(13, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';\n  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.9)';"),
+        ("  ctx.font = 'bold 10px system-ui'; ctx.lineWidth = 3;",
+         "  ctx.font = fnt(10, 'bold'); ctx.lineWidth = 3;"),
+        ("    ctx.font = t.crit ? 'bold 17px system-ui' : 'bold 13px system-ui';",
+         "    ctx.font = t.crit ? fnt(17, 'bold') : fnt(13, 'bold');"),
     ],
     # 5) 虎宠残留字段 pounceT: 定义了但从未被读取
     "js/ui.js": [
