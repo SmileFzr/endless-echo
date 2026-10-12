@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>无尽回响</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div id="hud" class="hidden">
+    <div class="topbar">
+      <div class="expwrap">
+        <div class="lvrow"><span id="lvTxt">Lv.1</span><span id="expTxt">0 / 8</span></div>
+        <div class="expbar"><div class="expfill" id="expFill"></div></div>
+        <div class="hpbar"><div class="hpfill" id="hpFill"></div></div>
+        <div class="hptxt" id="hpTxt">100 / 100</div>
+      </div>
+      <div class="stats">
+        <div>⏱ <b id="timeTxt">0:00</b></div>
+        <div>💀 <b id="killTxt">0</b></div>
+        <div>💰 <b id="goldTxt">0</b></div>
+        <div class="hudbtns">
+          <button class="audioBtn" id="btnAudio" title="音效开关">🔊</button>
+          <button class="audioBtn" id="btnPause" title="暂停">⏸</button>
+        </div>
+      </div>
+    </div>
+    <div class="petbar" id="petbar"></div>
+    <div class="skillbar" id="skillbar"></div>
+  </div>
+  <div class="veil" id="menu">
+    <div class="card">
+      <div class="title">无 尽 回 响</div>
+      <div class="sub">ROGUELIKE SURVIVAL</div>
+      <button class="btn primary" data-mode="endless">无 尽 模 式</button>
+      <button class="btn" data-mode="challenge">挑 战 模 式 · 15 分 钟</button>
+      <button class="btn" id="btnPets">🥚 宠 物 蛋</button>
+      <button class="btn" id="btnHelp">玩 法 说 明</button>
+      <div class="hint">虚拟摇杆：按住屏幕任意位置拖动<br>攻击全自动 · 升级三选一 · 每10级出精英</div>
+      <button class="btn tiny" id="btnResetFromMenu">重 置 存 档</button>
+    </div>
+  </div>
+  <div class="veil hidden" id="help">
+    <div class="card">
+      <div class="title" style="font-size:20px">玩 法 说 明</div>
+      <div class="sub">HOW TO PLAY</div>
+      <div style="text-align:left;font-size:12.5px;line-height:1.9;opacity:.8">
+        ▸ 拖动屏幕控制移动，攻击<b>全自动</b><br>
+        ▸ 击杀怪物掉落经验球，升级后<b>三选一</b><br>
+        ▸ 技能上限 <b>6 个</b>，每个可叠 <b>10 层</b><br>
+        ▸ 第 <b>11 层</b>触发变异，二选一改变机制<br>
+        ▸ 每 <b>10 级</b>刷新精英怪，击杀后小怪永久增强<br>
+        ▸ 屏幕边缘<b>红色箭头</b>指示精英位置<br>
+        ▸ 地图随机刷新 <b>💰传送商店</b>，用金币买永久属性<br>
+        ▸ <b>🥚宠物蛋</b>：金币孵化随机生肖，最多带 2 只出战<br>
+        ▸ 宠物跟随等级成长，等级到 11 自动变异<br>
+        ▸ 死亡结算金币，可在局外强化初始属性<br>
+        ▸ 按 <b>⏸暂停按钮</b> 或 ESC 可暂停/继续
+      </div>
+      <button class="btn primary" id="btnHelpBack" style="margin-top:18px">返 回</button>
+    </div>
+  </div>
+  <div class="veil hidden" id="pauseVeil">
+    <div class="card">
+      <div class="title" style="font-size:22px">已 暂 停</div>
+      <div class="sub">PAUSED</div>
+      <button class="btn primary" id="btnResume">继 续 游 戏</button>
+      <button class="btn" id="btnRestart">重 新 开 始</button>
+      <button class="btn" id="btnBackMenu">返 回 主 菜 单</button>
+      <button class="btn danger" id="btnResetFromPause" style="margin-top:20px">重 置 存 档</button>
+    </div>
+  </div>
+  <div class="veil hidden" id="resetVeil">
+    <div class="card">
+      <div class="title" style="font-size:20px;background:linear-gradient(90deg,#ff8080,#ff5050);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">重 置 存 档</div>
+      <div class="sub">此 操 作 不 可 撤 销</div>
+      <div style="font-size:13px;line-height:1.9;opacity:.78;margin:6px 0 18px;text-align:left;
+        background:rgba(255,80,80,.08);border:1px solid rgba(255,80,80,.25);border-radius:10px;padding:12px 14px">
+        确认要重置全部存档吗？<br>
+        • 金币清零<br>• 所有宠物消失<br>• 局外强化清零<br>• 历史最佳成绩清零
+      </div>
+      <button class="btn danger" id="btnResetConfirm">确 认 重 置</button>
+      <button class="btn" id="btnResetCancel">取 消</button>
+    </div>
+  </div>
+  <div class="veil hidden" id="petHome">
+    <div class="card">
+      <div class="title" style="font-size:21px">宠 物 蛋</div>
+      <div class="sub">收集 12 生肖伙伴</div>
+      <div class="goldrow">💰 <span id="petGold">0</span></div>
+      <div class="pet-grid" id="petGrid"></div>
+      <div class="pet-detail" id="petDetail">
+        <div class="dname">点击宠物查看详情</div>
+        <div style="opacity:.6">已解锁的宠物开局可最多选择 2 只出战</div>
+      </div>
+      <button class="btn primary" id="btnHatch">孵 化 蛋 · 100 💰</button>
+      <button class="btn" id="btnPetHomeBack">返 回</button>
+    </div>
+  </div>
+  <div class="veil hidden" id="petSelect">
+    <div class="card">
+      <div class="title" style="font-size:21px">选 择 出 战</div>
+      <div class="sub">最多 2 只宠物</div>
+      <div class="pet-grid" id="petSelectGrid"></div>
+      <div class="pet-detail" id="petSelectDetail">
+        <div class="dname">点击选择宠物</div>
+        <div style="opacity:.6">宠物不占用技能栏，自动攻击</div>
+      </div>
+      <button class="btn primary" id="btnPetStart">开 始 游 戏</button>
+      <button class="btn" id="btnPetSelectBack">返 回</button>
+    </div>
+  </div>
+  <div class="veil hidden" id="hatchVeil">
+    <div class="hatchBox">
+      <div class="hatchEgg" id="hatchEgg">🥚</div>
+      <div class="hatchName" id="hatchName"></div>
+      <div class="hatchDesc" id="hatchDesc"></div>
+    </div>
+  </div>
+  <div class="veil hidden" id="levelup">
+    <div class="card">
+      <div class="title" style="font-size:21px">升 级</div>
+      <div class="sub" id="luSub">LEVEL UP</div>
+      <div class="optlist" id="optList"></div>
+    </div>
+  </div>
+  <div class="veil hidden" id="shop">
+    <div class="card">
+      <div class="title" style="font-size:21px">传 送 商 店</div>
+      <div class="goldrow">💰 <span id="shopGold">0</span></div>
+      <div class="shoplist" id="shopList"></div>
+      <button class="btn primary" id="btnShopClose" style="margin-top:16px">离 开</button>
+    </div>
+  </div>
+  <div class="veil hidden" id="over">
+    <div class="card">
+      <div class="title" id="overTitle" style="font-size:24px">你 死 了</div>
+      <div class="sub" id="overSub">GAME OVER</div>
+      <div style="margin:14px 0 18px">
+        <div class="kv"><span>存活时间</span><span id="rTime">0:00</span></div>
+        <div class="kv"><span>击杀数</span><span id="rKill">0</span></div>
+        <div class="kv"><span>到达等级</span><span id="rLv">1</span></div>
+        <div class="kv"><span>获得金币</span><span id="rGold">0</span></div>
+        <div class="kv"><span>金币总额</span><span id="rTotal">0</span></div>
+      </div>
+      <button class="btn primary" id="btnRetry">再 来 一 局</button>
+      <button class="btn" id="btnMenu">返 回 主 菜 单</button>
+    </div>
+  </div>
+  <div id="toast"></div>
+</div>
+<script src="js/utils.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/game.js"></script>
+<script src="js/pets.js"></script>
+<script src="js/skills.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
