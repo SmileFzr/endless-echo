@@ -117,8 +117,37 @@ g.G.state = 'playing'; g.G.pendingLvUps = 0;
 // 无敌/秒杀
 ok(g.window.dbgGod(true).indexOf('开') >= 0, 'dbgGod(true): ' + g.window.dbgGod(true));
 ok(g.P._god === true, '无敌标记已设置');
+// 真的完全不掉血(不是 99% 减伤)
+g.P.invuln = 0;
+const hpGod = g.P.hp;
+vm.runInContext('damagePlayer(99999)', ctx);
+ok(g.P.hp === hpGod, 'dbgGod 开启时受到 99999 伤害也不掉血 (' + g.P.hp + ')');
+// 一击必杀: 不改 P.dmgMult, 而是 hurtEnemy 里直接放大伤害
+const dummy = vm.runInContext("(function(){ const e = { x:P.x+40, y:P.y, r:15, size:30, hp:5000, maxHp:5000, speed:0, dmg:0, exp:1, dead:false, atkCd:0, flash:0, acid:0, burn:0, type:'normal' }; enemies.push(e); hurtEnemy(e, 1); return e.hp; })()", ctx);
+ok(dummy <= 0, 'dbgGod 开启时一击必杀 (5000 血怪被 1 点伤害打死, 剩余 ' + dummy + ')');
+// 不该污染玩家成长数值
+const dmgMultBefore = g.P.dmgMult, reduceBefore = g.P.dmgReduce;
 g.window.dbgGod(false);
 ok(g.P._god === false, 'dbgGod(false) 可关闭');
+ok(g.P.dmgMult === dmgMultBefore && g.P.dmgReduce === reduceBefore,
+   '开关无敌不会污染伤害/护甲数值 (dmgMult=' + g.P.dmgMult.toFixed(2) + ' dmgReduce=' + g.P.dmgReduce.toFixed(3) + ')');
+g.P.invuln = 0;
+const hpNo = g.P.hp;
+vm.runInContext('damagePlayer(10)', ctx);
+ok(g.P.hp < hpNo, '关闭后正常掉血 (' + hpNo + ' → ' + Math.round(g.P.hp) + ')');
+
+// 只免伤不秒杀
+ok(g.window.dbgNoDamage(true).indexOf('开') >= 0, 'dbgNoDamage(true): ' + g.window.dbgNoDamage(true));
+g.P.invuln = 0;
+const hpNd = g.P.hp;
+vm.runInContext('damagePlayer(99999)', ctx);
+ok(g.P.hp === hpNd, 'dbgNoDamage 开启时不掉血 (' + g.P.hp + ')');
+ok(g.P.dmgMult === dmgMultBefore, 'dbgNoDamage 不影响伤害倍率 (仍为 ' + g.P.dmgMult.toFixed(2) + ')');
+g.window.dbgNoDamage(false);
+g.P.invuln = 0;
+const hpNd2 = g.P.hp;
+vm.runInContext('damagePlayer(10)', ctx);
+ok(g.P.hp < hpNd2, '关闭 dbgNoDamage 后恢复掉血');
 
 // 回血
 g.P.hp = 10;

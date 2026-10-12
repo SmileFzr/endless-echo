@@ -99,11 +99,16 @@ function dbgLevelUp(n) {          // 立刻弹 n 次升级三选一
 
 function dbgGod(on) {             // 无敌/秒杀开关, 不传参数则切换
   if (!P) return '先开始一局';
-  const want = (on === undefined) ? !P._god : !!on;
-  P._god = want;
-  if (want) { P._dmgMultBackup = P.dmgMult; P.dmgMult = 9999; P.dmgReduce = 0.99; }
-  else { if (P._dmgMultBackup) P.dmgMult = P._dmgMultBackup; P.dmgReduce = 0; }
-  return '调试模式(无敌+秒杀): ' + (want ? '开' : '关');
+  P._god = (on === undefined) ? !P._god : !!on;
+  // 不直接改 P.dmgMult / P.dmgReduce —— 它们每次 recalcStats() 都会被重算覆盖。
+  // 改为在 damagePlayer() / hurtEnemy() 里判断 _god 标记, 这样也不会破坏你的成长数值。
+  return '无敌模式: ' + (P._god ? '开 (完全不掉血 + 一击必杀)' : '关 (恢复正常)');
+}
+
+function dbgNoDamage(on) {        // 只免伤, 不秒杀(想正常打怪又不想死时用)
+  if (!P) return '先开始一局';
+  P._noDamage = (on === undefined) ? !P._noDamage : !!on;
+  return '免伤(不秒杀): ' + (P._noDamage ? '开 —— 你不会掉血, 但怪也要正常打' : '关');
 }
 
 function dbgHeal() { if (!P) return '先开始一局'; P.hp = P.maxHp; P.invuln = 3; return '已回满血 + 3 秒无敌'; }
@@ -210,7 +215,8 @@ function dbgHelp() {              // 列出全部调试指令
     ['dbgGold(n)', '给自己 n 金币(默认 5000)'],
     ['dbgLv(n)', '直接升到 n 级(默认 20)'],
     ['dbgLevelUp(n)', '立刻弹 n 次升级三选一'],
-    ['dbgGod(on)', '无敌+秒杀开关, 不传参数则切换'],
+    ['dbgGod(on)', '★ 无敌+秒杀: 完全不掉血, 一击必杀'],
+    ['dbgNoDamage(on)', '★ 只免伤不秒杀: 你不掉血, 但怪要正常打'],
     ['dbgHeal()', '回满血 + 3 秒无敌'],
     ['dbgKills(n)', '击杀数 +n(推进 NPC 委托)'],
     ['', ''],
@@ -257,6 +263,7 @@ if (typeof window !== 'undefined') {
   window.dbgLv = dbgLv;
   window.dbgLevelUp = dbgLevelUp;
   window.dbgGod = dbgGod;
+  window.dbgNoDamage = dbgNoDamage;
   window.dbgHeal = dbgHeal;
   window.dbgKills = dbgKills;
   // 宠物与怪物

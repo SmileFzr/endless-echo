@@ -121,6 +121,8 @@ function aoeDamage(x, y, r, dmg, exclude) {
    ★ 修复：对精英怪伤害 ×1.4
    ============================================================ */
 function hurtEnemy(e, dmg, isCrit) {
+  if (P._god) dmg = 1e9;          // 调试无敌同时开启一击必杀
+
   if (e.dead) return;
   if (e.acid > 0) dmg *= 1.3;
   if (e.burn > 0) dmg *= (1 + e.burn * 0.05);
@@ -282,6 +284,8 @@ function updatePlayer(dt) {
 }
 function damagePlayer(dmg) {
   if (P.invuln > 0) return;
+  // 调试无敌(控制台 dbgGod / dbgNoDamage 打开时)
+  if (P._god || P._noDamage) return;
   P.hp -= Math.max(1, dmg * (1 - P.dmgReduce));
   P.invuln = 0.42; P.hurtFlash = 0.22;
   G.shake = Math.max(G.shake, 5); sfx('hurt');

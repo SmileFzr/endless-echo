@@ -486,6 +486,16 @@ PATCHES = {
          "      }\n"
          "      eBullets.splice(i, 1); continue;\n"
          "    }"),
+        # 12) 调试无敌: dbgGod() 或 dbgNoDamage() 打开时完全不掉血
+        ("function damagePlayer(dmg) {\n  if (P.invuln > 0) return;",
+         "function damagePlayer(dmg) {\n"
+         "  if (P.invuln > 0) return;\n"
+         "  // 调试无敌(控制台 dbgGod / dbgNoDamage 打开时)\n"
+         "  if (P._god || P._noDamage) return;"),
+        # 13) 调试秒杀: dbgGod() 打开时一击必杀
+        ("function hurtEnemy(e, dmg, isCrit) {",
+         "function hurtEnemy(e, dmg, isCrit) {\n"
+         "  if (P._god) dmg = 1e9;          // 调试无敌同时开启一击必杀\n"),
     ],
     # 8) 生肖宠物扩展(兔/蛇/马/羊/猴/鸡/猪/牛): 由 js/pets-extra.js 提供,
     #    合并进 PETS 表, 让"12 生肖"名实相符
