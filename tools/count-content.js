@@ -45,26 +45,37 @@ sb.window = sb; sb.globalThis = sb; sb.self = sb;
 const ctx = vm.createContext(sb);
 vm.runInContext(order.map(n => fs.readFileSync(path.join(ROOT, 'js', n), 'utf8')).join('\n;\n'), ctx, { filename: 'bundle.js' });
 
-const g = vm.runInContext(`({ ENEMY_TYPES, SKILLS, PASSIVES, PETS, SHOP_ITEMS, SPECIALS, NPCS,
+const g = vm.runInContext(`({ ENEMY_TYPES, ELITE_TYPES, SKILLS, PASSIVES, PETS, SHOP_ITEMS, SPECIALS, NPCS,
   BH_TRIGGER_SKILLS, BH_TRIGGER_LEVEL, BH_RESPAWN_MIN, BH_RESPAWN_MAX, BH_PORTAL_LIFE,
   G })`, ctx);
 
 const line = (s) => console.log(s);
 
-line('================ 怪物 (ENEMY_TYPES) ================');
+line('================ 普通怪物 (ENEMY_TYPES 里非 elite 的) ================');
 const keys = Object.keys(g.ENEMY_TYPES);
-line('共 ' + keys.length + ' 种:');
-for (const k of keys) {
+const normal = keys.filter(k => !g.ENEMY_TYPES[k].elite);
+const eliteBase = keys.filter(k => g.ENEMY_TYPES[k].elite);   // 只作为精英数值模板
+line('共 ' + normal.length + ' 种:');
+for (const k of normal) {
   const t = g.ENEMY_TYPES[k];
   line('  ' + t.sprite + ' ' + k.padEnd(7) + ' 血 ' + String(t.hp).padStart(3) +
        '  速 ' + String(t.speed).padStart(3) + '  伤害 ' + String(t.dmg).padStart(2) +
-       '  经验 ' + t.exp + (t.ranged ? '  远程' : '') + (t.explode ? '  自爆' : '') +
-       (t.elite ? '  ★精英' : ''));
+       '  经验 ' + t.exp + (t.ranged ? '  远程' : '') + (t.explode ? '  自爆' : ''));
 }
-const normal = keys.filter(k => !g.ENEMY_TYPES[k].elite);
-const elite = keys.filter(k => g.ENEMY_TYPES[k].elite);
-line('  → 普通怪物 ' + normal.length + ' 种, 精英 ' + elite.length + ' 种');
 line('  → 初始只有 normal, 每击杀一只精英依次解锁一种: ' + g.G.unlocked.join(', '));
+
+line('');
+line('================ 精英怪物 (ELITE_TYPES) ================');
+const ET = g.ELITE_TYPES;
+const base = g.ENEMY_TYPES.elite;
+line('共 ' + ET.length + ' 种(基准血量 ' + base.hp + ' / 伤害 ' + base.dmg + '):');
+for (const d of ET) {
+  line('  ' + d.sprite + ' ' + d.name.padEnd(4) + ' (' + d.id.padEnd(9) + ')' +
+       ' 血×' + d.hpMul.toFixed(2) + ' 速×' + d.spdMul.toFixed(2) +
+       ' 伤×' + d.dmgMul.toFixed(2) + ' 体型×' + d.rMul.toFixed(2) +
+       '  机制:' + (d.trait || '冲撞'));
+}
+line('  → 每 10 级随机刷一种; 击杀后所有小怪永久增强, 精英血量 ×1.10/只');
 
 line('');
 line('================ 技能 (SKILLS) ================');
@@ -130,7 +141,7 @@ line('  黑洞存在: ' + g.BH_PORTAL_LIFE + ' 秒');
 
 line('');
 line('================ 汇总 ================');
-line('  怪物 ' + normal.length + ' 种 + 精英 ' + elite.length + ' 种');
+line('  怪物 ' + normal.length + ' 种 + 精英 ' + ET.length + ' 种');
 line('  技能 ' + sk.length + ' 个(含变异 ' + mutCount + ' 个)');
 line('  属性强化 ' + g.PASSIVES.length + ' 项');
 line('  宠物 ' + pets.length + ' 只');

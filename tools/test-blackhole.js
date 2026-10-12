@@ -304,12 +304,16 @@ const all = [];
 (function walk(node) { for (const c of node.children) { if (c.className && c.className.indexOf('codexitem') >= 0) all.push(c); walk(c); } })(body);
 const locked = all.filter(n => n.className.indexOf('locked') >= 0);
 const lit = all.filter(n => n.className.indexOf('locked') < 0);
-ok(all.length === Object.keys(g.ENEMY_TYPES).length + Object.keys(g.PETS).length,
-   '图鉴条目总数 = 怪物 ' + Object.keys(g.ENEMY_TYPES).length + ' + 宠物 ' + Object.keys(g.PETS).length +
+// 图鉴只收怪物: 普通怪 6 种 + 精英 9 种 = 15(宠物在"宠物蛋"里有自己的图鉴)
+const eliteIds = vm.runInContext('ELITE_TYPES.map(d => d.id)', ctx);
+const normalIds = vm.runInContext('Object.keys(ENEMY_TYPES).filter(k => !ENEMY_TYPES[k].elite)', ctx);
+ok(all.length === normalIds.length + eliteIds.length,
+   '图鉴条目总数 = 普通 ' + normalIds.length + ' + 精英 ' + eliteIds.length +
    ' (实际 ' + all.length + ')');
+ok(all.every(n => n.className.indexOf('pet') < 0), '图鉴里没有宠物条目');
 ok(locked.length > 0, '没遇到的条目显示为空框 (共 ' + locked.length + ' 个未点亮)');
-ok(lit.length === g.seenList('enemy').length + g.seenList('pet').length,
-   '点亮的条目数 = 已遇到的怪物 + 宠物 (' + lit.length + ')');
+ok(lit.length === g.seenList('enemy').length,
+   '点亮的条目数 = 已遇到的怪物 (' + lit.length + ')');
 // 空框不该可点击
 ok(locked.every(n => !n.onclick), '未点亮的条目不可点击');
 

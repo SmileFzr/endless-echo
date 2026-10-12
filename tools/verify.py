@@ -48,7 +48,7 @@ html = rd("index.html")
 order = re.findall(r'<script src="js/([^"]+)"></script>', html)
 FROM_SOURCE = ["utils.js", "audio.js", "game.js", "pets.js", "skills.js", "render.js", "ui.js"]
 # 手写模块 / 扩展数据表, 不在原始单文件里
-EXTRA = ["pets-extra.js", "blackhole.js", "debug-cmds.js"]
+EXTRA = ["elite-types.js", "pets-extra.js", "blackhole.js", "debug-cmds.js"]
 assert sorted(order) == sorted(FROM_SOURCE + EXTRA), order
 
 ok = True
@@ -97,17 +97,23 @@ patched_flat = set(flat(l) for l in patched)
 
 
 def is_accounted(line):
-    """原始行是否仍然存在于产物中(可能被补丁在两端拼接了代码)"""
+    """原始行是否仍然存在于产物中(可能被补丁在中间插入 / 两端拼接了代码)"""
     if line in prod_flat or flat(line) in prod_flat:
         return True
     # 整行在内容上原封不动地出现在产物里(补丁只在其前后插入了代码)
     if flat(line) in prod_blob:
         return True
-    # 或者被补丁明确声明为已替换 / 行内编辑
     f = flat(line)
+    # 补丁在长行"中间"插入内容时, 产物行会以原文的一段开头、并以原文的另一段结尾
+    for cand in prod_flat:
+        if len(cand) <= len(f):
+            continue
+        for k in range(len(f) - 1, max(0, len(f) - 160), -1):
+            if cand.startswith(f[:k]) and cand.endswith(f[k:]):
+                return True
+    # 或者被补丁明确声明为已替换 / 行内编辑
     if f in patched_flat:
         return True
-    # 行内编辑: 该长行中间的一小段被插/删过(补丁记录的就是那一小段)
     if any(x in f for x in inline):
         return True
     return any(f == r or f.startswith(r) or r.endswith(f) or f in r for r in replaced)

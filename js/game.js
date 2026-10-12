@@ -68,7 +68,7 @@ window.addEventListener('mouseup', () => { mouseDown = false; input.joy.active =
 
 function createPlayer() {
   const baseHp = 100 + SAVE.up.hp * 22;
-  return { x:0, y:0, r:15, hp:baseHp, maxHp:baseHp, baseSpeed:205 * (1 + SAVE.up.spd * 0.05), speed:205, level:1, exp:0, expNext:expForLevel(1), pickupRange:82, dmgMult:1, cdr:0, crit:0.05, regen:0, dmgReduce:0, expMult:1, stillTime:0, moving:false, skills:[], pets:[], invuln:0, hurtFlash:0, up:{ maxhp:0, speed:0, dmg:0, cdr:0, armor:0, regen:0, crit:0, pickup:0 }, sizeScale:1 - SAVE.up.size * 0.04 };
+  return { x:0, y:0, r:15, hp:baseHp, maxHp:baseHp, baseSpeed:205 * (1 + SAVE.up.spd * 0.05), speed:205, level:1, exp:0, expNext:expForLevel(1), pickupRange:82, dmgMult:1, cdr:0, crit:0.05, regen:0, dmgReduce:0, expMult:1, stillTime:0, moving:false, skills:[], pets:[], invuln:0, hurtFlash:0, slowT:0, up:{ maxhp:0, speed:0, dmg:0, cdr:0, armor:0, regen:0, crit:0, pickup:0 }, sizeScale:1 - SAVE.up.size * 0.04 };
 }
 function expForLevel(lv) { return Math.floor(4 + lv * 2.6 + Math.pow(lv, 1.42)); }
 function recalcStats() {
@@ -93,7 +93,9 @@ function recalcStats() {
     if (s.id === 'immovable') { const still = P.stillTime > 0.35; if (still) { dmg += s.lv * 0.06; cdr += s.lv * 0.04; if (s.mut === 'root') { regen += P.maxHp * 0.02; armor += 0.20; } if (s.mut === 'rage') cdr += 0.5; } }
   }
   cdr = Math.min(cdr, 0.72);
-  P.dmgMult = dmg; P.speed = P.baseSpeed * spd; P.cdr = cdr; P.pickupRange = pick;
+  P.dmgMult = dmg;
+  P.speed = P.baseSpeed * spd * (P.slowT > 0 ? 0.55 : 1);   // 幽魂冰弹减速
+  P.cdr = cdr; P.pickupRange = pick;
   P.expMult = expm; P.dmgReduce = Math.min(armor, 0.75); P.regen = regen; P.crit = Math.min(crit, 0.85);
   const newMax = (100 + SAVE.up.hp * 22) + hpBonus;
   if (newMax > P.maxHp) P.hp += newMax - P.maxHp;
@@ -124,6 +126,7 @@ function hurtEnemy(e, dmg, isCrit) {
   if (e.burn > 0) dmg *= (1 + e.burn * 0.05);
   if (e.poison > 0) dmg *= (1 + e.poison * 0.04);   // 中毒状态增伤
   if (e.elite) dmg *= 1.4;  // ★ 新增：对精英怪伤害加成
+  if (e.eliteTrait === 'shield') dmg *= 0.6;
   const d = Math.max(1, Math.round(dmg));
   e.hp -= d; e.flash = 0.09;
   if (texts.length < 30) texts.push({ x:e.x+rnd(-8,8), y:e.y-e.r-4, v:-46, life:0.55, max:0.55, t:String(d), crit:!!isCrit });
@@ -131,6 +134,17 @@ function hurtEnemy(e, dmg, isCrit) {
 }
 function killEnemy(e) {
   if (e.dead) return;
+  if (e.elite && e.eliteTrait === 'undead' && !e.revived) {
+    e.revived = true;
+    e.hp = Math.max(1, Math.round(e.maxHp * 0.5));
+    e.flash = 0.3;
+    effects.push({ kind:'boom', x:e.x, y:e.y, life:0.5, max:0.5, r:150, col:'#8ef07a' });
+    aoeDamage(e.x, e.y, 150, e.dmg * 0.8);
+    if (Math.hypot(P.x - e.x, P.y - e.y) < 150 + P.r) damagePlayer(e.dmg * 0.6);
+    toast('☠ ' + e.name + ' 又站起来了！');
+    sfx('mut');
+    return;
+  }
   e.dead = true; G.kills++; sfx('kill');
   markSeen('enemy', e.type);   // 图鉴: 见过即记录
   if (e.elite) { G.eliteAlive = false; onEliteKilled(e); return; }
@@ -168,15 +182,18 @@ function spawnElite() {
   const eliteHp = (200 + P.level * 35) * (1 + m * 0.12) * G.hpMult;
   // 10级 3分钟：(200+350) * 1.36 = 748
   // 20级 7分钟：(200+700) * 1.84 = 1656
+  const def = ELITE_TYPES[(Math.random() * ELITE_TYPES.length) | 0];
   enemies.push({
-    type:'elite', x, y, vx:0, vy:0, r:t.r, size:t.size,
-    hp: eliteHp, maxHp: eliteHp,
-    speed: t.speed * (1 + G.diffCount * 0.04),
-    dmg: t.dmg * (1 + G.diffCount * 0.08),
-    exp:0, sprite:t.sprite, elite:true, dead:false, atkCd:0, flash:0, acid:0, burn:0
+    type:'elite', eliteDef:def.id, name:def.name, x, y, vx:0, vy:0,
+    r: t.r * def.rMul, size: t.size * def.rMul,
+    hp: eliteHp * def.hpMul, maxHp: eliteHp * def.hpMul,
+    speed: t.speed * def.spdMul * (1 + G.diffCount * 0.04),
+    dmg: t.dmg * def.dmgMul * (1 + G.diffCount * 0.08),
+    exp:0, sprite:def.sprite, elite:true, dead:false, atkCd:0, flash:0, acid:0, burn:0,
+    eliteTrait:def.trait, revived:false, shootCd:1.5, roarCd:4, poisonTick:0
   });
   G.eliteAlive = true;
-  toast('⚠ 精英怪降临！屏幕边缘有红色箭头');
+  toast('⚠ 精英怪降临：' + def.name + '！屏幕边缘有红色箭头');
   G.shake = 12; sfx('elite');
 }
 function onEliteKilled(e) {
@@ -190,6 +207,17 @@ function onEliteKilled(e) {
   G.shake = 18; sfx('eliteKill');
   P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.3);
   toast(`精英已灭 · 小怪强化 +10% · 金币 +${bonusGold}`);
+}
+function eliteDefOf(id) {
+  for (const d of ELITE_TYPES) if (d.id === id) return d;
+  return ELITE_TYPES[0];
+}
+/* 推进一个冷却计时。必须用 undefined 判断, 不能写 (x || 默认值):
+   因为 0 || 默认值 === 默认值, 会让归零后的冷却被重置, 永远触发不了。 */
+function cdTick(obj, key, dt) {
+  if (typeof obj[key] !== 'number') obj[key] = 0;
+  obj[key] -= dt;
+  return obj[key];
 }
 function getHpScale() { const m = G.time / 60; return 1 + m * 0.62 + m * m * 0.052; }
 function updateSpawn(dt) {
@@ -239,6 +267,7 @@ function updatePlayer(dt) {
   P.x += mx * spd * dt; P.y += my * spd * dt;
   if (P.invuln > 0) P.invuln -= dt;
   if (P.hurtFlash > 0) P.hurtFlash -= dt;
+  if (P.slowT > 0) P.slowT -= dt;                   // 冰弹减速剩余时间
   recalcStats();
   if (P.regen > 0) P.hp = Math.min(P.maxHp, P.hp + P.regen * dt);
   if (P.bootsT <= 0) for (const e of enemies) {   // 踏空靴生效时不与怪物碰撞
@@ -423,14 +452,17 @@ function updateEnemies(dt) {
       else if (dist > 800) sp = e.speed * 2.5;
       else if (dist > 400) sp = e.speed * 1.5;
       e.x += Math.cos(moveA) * sp * dt; e.y += Math.sin(moveA) * sp * dt;
-      e.chargeCd = (e.chargeCd || 3) - dt;
-      if (e.chargeCd <= 0 && dist < 420) { e.chargeCd = 4.5; e.chargeT = 0.55; effects.push({ kind:'ring', x:e.x, y:e.y, life:0.4, max:0.4, r:110, col:'#ff5f6d' }); }
+      if (cdTick(e, 'chargeCd', dt) <= 0 && dist < 420) {
+        e.chargeCd = 4.5; e.chargeT = 0.55;
+        effects.push({ kind:'ring', x:e.x, y:e.y, life:0.4, max:0.4, r:110, col:'#ff5f6d' });
+      }
       if (e.chargeT > 0) {
         e.chargeT -= dt;
         e.x += (dx / dist) * e.speed * 4.5 * dt; e.y += (dy / dist) * e.speed * 4.5 * dt;
         // 冲锋期间持续刷新无敌帧, 避免一次冲锋被反复结算伤害
         if (P.invuln < 0.12) P.invuln = 0.12;
       }
+      if (typeof updateEliteTraits === 'function') updateEliteTraits(e, dt, dx, dy, dist);
     } else {
       e.wob += dt * 2.4;
       const moveA = Math.atan2(dy, dx) + Math.sin(e.wob) * 0.25;
@@ -445,7 +477,14 @@ function updateEBullets(dt) {
     const b = eBullets[i];
     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
     const dx = P.x - b.x, dy = P.y - b.y;
-    if (dx * dx + dy * dy < (P.r + b.r) ** 2) { damagePlayer(b.dmg); eBullets.splice(i, 1); continue; }
+    if (dx * dx + dy * dy < (P.r + b.r) ** 2) {
+      damagePlayer(b.dmg);
+      if (b.chill) {
+        P.slowT = Math.max(P.slowT || 0, 2.5);
+        effects.push({ kind:'ring', x:P.x, y:P.y, life:0.4, max:0.4, r:44, col:'#8ad4ff' });
+      }
+      eBullets.splice(i, 1); continue;
+    }
     if (b.life <= 0) eBullets.splice(i, 1);
   }
 }

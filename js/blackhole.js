@@ -896,29 +896,37 @@ function renderCodex() {
   if (!body) return;
   body.innerHTML = '';
 
-  const pets = Object.keys(PETS), foes = Object.keys(ENEMY_TYPES);
-  const seenP = seenList('pet'), seenE = seenList('enemy');
-  const cntP = pets.filter(k => seenP.indexOf(k) >= 0).length;
-  const cntE = foes.filter(k => seenE.indexOf(k) >= 0).length;
+  // 图鉴只收怪物(宠物在"宠物蛋"里已有自己的图鉴)
+  // 普通怪 = ENEMY_TYPES 里非 elite 的; 精英 = ELITE_TYPES 全部
+  const normal = Object.keys(ENEMY_TYPES).filter(k => !ENEMY_TYPES[k].elite);
+  const elites = ELITE_TYPES.map(d => d.id);
+  const seenE = seenList('enemy');
+  const cntN = normal.filter(k => seenE.indexOf(k) >= 0).length;
+  const cntL = elites.filter(k => seenE.indexOf(k) >= 0).length;
+  const total = normal.length + elites.length;
   el('codexProg').innerHTML =
-    '宠物 ' + cntP + ' / ' + pets.length + '　·　怪物 ' + cntE + ' / ' + foes.length +
+    '已记录 <b>' + (cntN + cntL) + ' / ' + total + '</b>' +
+    '　（普通 ' + cntN + '/' + normal.length + '　·　精英 ' + cntL + '/' + elites.length + '）' +
     '<br><span style="opacity:.7">遇到过的才会点亮，没遇到的只留一个空框</span>';
 
-  // 怪物(含精英)
-  const g1 = codexSection(body, '怪物', '共 ' + foes.length + ' 种');
-  for (const k of foes) {
+  // 普通怪物
+  const g1 = codexSection(body, '普通怪物', '共 ' + normal.length + ' 种');
+  for (const k of normal) {
     const t = ENEMY_TYPES[k];
-    const label = t.elite ? '精英' : (k === 'normal' ? '普通' : (t.ranged ? '远程' : (t.explode ? '自爆' : '近战')));
-    g1.appendChild(codexItem(t.sprite, t.elite ? '精英怪' : k, label, t.elite ? 'enemy elite' : 'enemy', k, 'enemy'));
-  }
-  // 宠物
-  const g2 = codexSection(body, '生肖宠物', '已收集 ' + cntP + ' / ' + pets.length);
-  for (const k of pets) {
-    const p = PETS[k];
-    g2.appendChild(codexItem(p.emoji, p.name, p.skill, 'pet', k, 'pet'));
+    const label = k === 'normal' ? '基础近战'
+      : t.ranged ? '远程射手' : t.explode ? '自爆单位'
+      : k === 'tank' ? '重装坦克' : k === 'fast' ? '高速突进' : k === 'swarm' ? '群体虫潮' : '近战';
+    g1.appendChild(codexItem(t.sprite, k, label, 'enemy', k, 'enemy'));
   }
 
-  codexDetail('enemy', foes.find(k => seenE.indexOf(k) >= 0) || null);
+  // 精英怪物
+  const g2 = codexSection(body, '精英怪物', '共 ' + elites.length + ' 种 · 每 10 级刷新');
+  for (const id of elites) {
+    const d = eliteDefOf(id);
+    g2.appendChild(codexItem(d.sprite, d.name, '精英', 'enemy elite', id, 'enemy'));
+  }
+
+  codexDetail('enemy', normal.find(k => seenE.indexOf(k) >= 0) || null);
 }
 
 function codexDetail(kind, id) {
@@ -948,6 +956,83 @@ function codexDetail(kind, id) {
                   id === 'fast' ? '移动极快的突进单位' :
                   id === 'swarm' ? '血量很低但数量众多的群体单位' : '最基础的近战单位')) +
       '</div>';
+  }
+}
+
+/* ============================================================
+   精英怪特性 / elite traits
+   各种精英的独有机制集中在这里, 由 game.js 的 updateEnemies 每帧调用。
+   放在本文件是为了避开对那段冲锋逻辑的字符串改写(容易与其它补丁冲突)。
+   ============================================================ */
+function updateEliteTraits(e, dt, dx, dy, dist) {
+  if (!e.elite || !e.eliteTrait) return;
+  const t = e.eliteTrait;
+
+  // 吸血鬼: 持续汲取生命
+  if (t === 'lifesteal') {
+    e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.012 * dt);
+  }
+
+  // 霸王龙: 周期性咆哮, 加速周围小怪
+  if (t === 'roar') {
+    if (typeof e.roarCd !== 'number') e.roarCd = 4;
+    if (cdTick(e, 'roarCd', dt) <= 0) {
+      e.roarCd = 9;
+      effects.push({ kind: 'ring', x: e.x, y: e.y, life: 0.6, max: 0.6, r: 260, col: '#ff8c42' });
+      G.shake = Math.max(G.shake, 7);
+      sfx('elite');
+      for (const o of enemies) { if (!o.dead && !o.elite) o.speed *= 1.12; }
+      toast('🦖 ' + e.name + ' 咆哮了，小怪变快！');
+    }
+  }
+
+  // 幽魂: 远程吐息冰弹(命中减速)
+  // 注意: 不能写 (e.shootCd || 1.5) —— 0 || 1.5 === 1.5, 冷却会永远归不到零
+  if (t === 'frostshot') {
+    if (typeof e.shootCd !== 'number') e.shootCd = 1.5;
+    if (cdTick(e, 'shootCd', dt) <= 0 && dist < 700) {
+      e.shootCd = 3.2;
+      const fa = Math.atan2(dy, dx);
+      eBullets.push({
+        x: e.x, y: e.y, vx: Math.cos(fa) * 250, vy: Math.sin(fa) * 250,
+        r: 9, dmg: e.dmg * 0.7, life: 4, sprite: '❄️', chill: true,
+      });
+    }
+  }
+
+  // 树妖: 周身毒雾, 靠近持续掉血
+  if (t === 'poison') {
+    e.poisonTick = (e.poisonTick || 0) - dt;
+    if (e.poisonTick <= 0) {
+      e.poisonTick = 0.5;
+      if (dist < e.r + 130) {
+        damagePlayer(e.dmg * 0.22);
+        effects.push({ kind: 'ring', x: e.x, y: e.y, life: 0.45, max: 0.45, r: e.r + 130, col: '#8ef07a' });
+      }
+    }
+  }
+
+  // 妖怪: 飘忽闪现, 瞬移到你附近再扑上来
+  if (t === 'trick') {
+    if (typeof e.blinkCd !== 'number') e.blinkCd = 3;
+    if (cdTick(e, 'blinkCd', dt) <= 0 && dist > 120) {
+      e.blinkCd = 5;
+      const a = Math.random() * TAU;
+      effects.push({ kind: 'ring', x: e.x, y: e.y, life: 0.35, max: 0.35, r: e.r + 20, col: '#c99cff' });
+      e.x = P.x + Math.cos(a) * 150;
+      e.y = P.y + Math.sin(a) * 150;
+      effects.push({ kind: 'ring', x: e.x, y: e.y, life: 0.35, max: 0.35, r: e.r + 20, col: '#c99cff' });
+      sfx('mut');
+    }
+  }
+
+  // 毛怪: 被打中后有机会把你冻住一小会(hurtEnemy 里留下 _hitFlag)
+  if (t === 'slowhit' && e._hitFlag) {
+    e._hitFlag = false;
+    if (Math.random() < 0.25) {
+      P.slowT = Math.max(P.slowT || 0, 1.6);
+      effects.push({ kind: 'ring', x: P.x, y: P.y, life: 0.4, max: 0.4, r: 44, col: '#cfe8ff' });
+    }
   }
 }
 

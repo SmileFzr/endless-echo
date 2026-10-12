@@ -15,7 +15,6 @@
    ============================================================ */
 
 /* ---- 内容解锁 ---- */
-/* ---- 内容解锁 ---- */
 function dbgAllPets() {            // 解锁全部 12 只生肖宠物
   ensureSaveSlots();
   SAVE.pets = Object.keys(PETS).slice();
@@ -65,7 +64,9 @@ function dbgAllSpecials() {       // 解锁并重置全部特殊能力(含被动
 
 function dbgCodexAll() {          // 图鉴全部点亮
   ensureSaveSlots();
-  SAVE.seenEnemies = Object.keys(ENEMY_TYPES).slice();
+  // 图鉴只收怪物: 普通怪 + 全部精英类型; 宠物另有"宠物蛋"图鉴, 这里一并点亮备用
+  SAVE.seenEnemies = Object.keys(ENEMY_TYPES).filter(k => !ENEMY_TYPES[k].elite)
+    .concat(ELITE_TYPES.map(d => d.id));
   SAVE.seenPets = Object.keys(PETS).slice();
   writeSave();
   if (G.state === 'codex') renderCodex();
@@ -107,11 +108,37 @@ function dbgGod(on) {             // 无敌/秒杀开关, 不传参数则切换
 
 function dbgHeal() { if (!P) return '先开始一局'; P.hp = P.maxHp; P.invuln = 3; return '已回满血 + 3 秒无敌'; }
 
-function dbgSpawn(type, n) {      // 在附近刷怪, 例如 dbgSpawn('tank', 5) / dbgSpawn('elite')
+function dbgSpawn(type, n) {      // 刷怪: dbgSpawn('tank',5) / dbgSpawn('elite') / dbgSpawn('elite:rex')
   if (!P) return '先开始一局';
   const t = type || 'normal';
-  if (t === 'elite') { spawnElite(); return '已刷新 1 只精英怪'; }
-  if (!ENEMY_TYPES[t]) return '未知怪物类型: ' + t + ' (可用: ' + Object.keys(ENEMY_TYPES).join(', ') + ', elite)';
+
+  // 精英: 可指定类型, 例如 dbgSpawn('elite:rex') 或 dbgSpawn('elite:僵尸')
+  if (t === 'elite' || t.indexOf('elite:') === 0) {
+    const want = t.indexOf('elite:') === 0 ? t.slice(6) : null;
+    let wantDef = null;
+    if (want) {
+      wantDef = ELITE_TYPES.find(d => d.id === want || d.name === want);
+      if (!wantDef) {
+        return '未知精英: ' + want + '\n可用: ' + ELITE_TYPES.map(d => d.id + '(' + d.name + ')').join(', ');
+      }
+    }
+    // 不指定类型时随机; 指定了就一直抽到该类型为止
+    for (let i = 0; i < (wantDef ? 400 : 1); i++) {
+      spawnElite();
+      const e = enemies[enemies.length - 1];
+      if (!wantDef || e.eliteDef === wantDef.id) {
+        return '已刷新 ' + e.sprite + e.name + ' (血 ' + Math.round(e.maxHp) +
+               ' / 速 ' + Math.round(e.speed) + ' / 机制 ' + (e.eliteTrait || '冲撞') + ')';
+      }
+      enemies.pop();   // 抽错了丢回去重抽
+    }
+    return '没能刷出指定的精英: ' + want;
+  }
+
+  if (!ENEMY_TYPES[t]) {
+    return '未知怪物类型: ' + t + '\n可用: ' + Object.keys(ENEMY_TYPES).join(', ') +
+           '\n精英: elite 或 elite:<' + ELITE_TYPES.map(d => d.id).join('|') + '>';
+  }
   const cnt = n || 1;
   const def = ENEMY_TYPES[t];
   const hpScale = getHpScale() * G.hpMult;

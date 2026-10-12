@@ -135,7 +135,10 @@ ok(true, '推进一帧不报错(任务进度会顺带更新)');
 // 刷怪
 const rSpawn = g.window.dbgSpawn('tank', 5);
 ok(g.enemies.filter(e => e.type === 'tank' && !e.dead).length === 5, 'dbgSpawn(tank,5) 精确生成 5 只坦克: ' + rSpawn);
-ok(g.window.dbgSpawn('elite').indexOf('精英') >= 0, 'dbgSpawn(elite): ' + g.window.dbgSpawn('elite'));
+ok(/已刷新/.test(g.window.dbgSpawn('elite')), 'dbgSpawn(elite) 随机刷:' + g.window.dbgSpawn('elite'));
+const rRex = g.window.dbgSpawn('elite:rex');
+ok(/霸王龙/.test(rRex), 'dbgSpawn(elite:rex) 精确刷出:' + rRex);
+ok(/未知精英/.test(g.window.dbgSpawn('elite:nope')), 'dbgSpawn 对未知精英给出提示');
 ok(g.enemies.some(e => e.elite && !e.dead), '场上确实有精英怪');
 ok(g.window.dbgSpawn('不存在的怪').indexOf('未知') >= 0, 'dbgSpawn 对未知类型给出提示');
 const rKill = g.window.dbgKillElite();
@@ -147,8 +150,8 @@ ok(g.window.dbgClearFoes() === nFoes, 'dbgClearFoes 返回清掉的数量 ' + nF
 ok(g.window.dbgShop().indexOf('商店') >= 0, 'dbgShop: ' + g.window.dbgShop());
 g.G.state = 'playing';
 ok(g.window.dbgCodexAll().indexOf('点亮') >= 0, 'dbgCodexAll: ' + g.window.dbgCodexAll());
-ok(g.seenList('enemy').length === Object.keys(g.ENEMY_TYPES).length, '图鉴怪物全点亮');
-ok(g.seenList('pet').length === Object.keys(g.PETS).length, '图鉴宠物全点亮');
+ok(g.seenList('enemy').length === 15, '图鉴怪物全点亮(普通 6 + 精英 9 = ' + g.seenList('enemy').length + ')');
+ok(g.seenList('pet').length === Object.keys(g.PETS).length, '宠物图鉴全点亮(' + g.seenList('pet').length + ' 只, 供宠物蛋界面用)');
 const seen = g.window.dbgSeen();
 ok(seen && Array.isArray(seen.怪物) && Array.isArray(seen.宠物), 'dbgSeen 返回结构正确');
 ok(g.window.dbgTown().indexOf('小镇') >= 0, 'dbgTown: ' + g.window.dbgTown());

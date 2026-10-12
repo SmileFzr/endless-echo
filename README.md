@@ -1,11 +1,11 @@
 # 无尽回响 · Endless Echo
 
 [![在线试玩](https://img.shields.io/badge/▶_在线试玩-点这里开始-7c3aed?style=for-the-badge)](https://smilefzr.github.io/endless-echo/)
-[![版本](https://img.shields.io/badge/版本-v1.6.0-ffd76a?style=flat-square)](#版本历史)
+[![版本](https://img.shields.io/badge/版本-v1.7.0-ffd76a?style=flat-square)](#版本历史)
 [![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-已部署-22c55e?style=flat-square)](https://smilefzr.github.io/endless-echo/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-**🎮 直接开始玩：<https://smilefzr.github.io/endless-echo/>**　（当前版本 **v1.6.0**）
+**🎮 直接开始玩：<https://smilefzr.github.io/endless-echo/>**　（当前版本 **v1.7.0**）
 
 一个纯前端（零依赖、零构建）的 Roguelike 生存小游戏。手机、平板、桌面浏览器都能直接玩。
 
@@ -43,6 +43,7 @@ python -m http.server 8000
 │   ├── utils.js        # 常量与工具函数（TAU / rnd / clamp / fmtTime ...）
 │   ├── audio.js        # Web Audio 音频引擎：循环 BGM + 音效合成
 │   ├── game.js         # 游戏状态、数值成长、战斗与推进逻辑
+│   ├── elite-types.js  # 9 种精英怪的类型表（手写模块，最先加载）
 │   ├── pets-extra.js   # 生肖宠物扩展表（兔/蛇/马/羊/猴/鸡/猪/牛）
 │   ├── pets.js         # 宠物表（鼠/虎/龙/狗，并合并上面的扩展表）
 │   ├── skills.js       # 技能表与属性表
@@ -59,14 +60,18 @@ python -m http.server 8000
     ├── smoke-test.js   # 用 DOM 桩在 Node 里跑运行时冒烟测试
     ├── stress-test.js  # 全技能 × 全变异的压力测试
     ├── audit-numbers.js# 数值审计（加成是否被重复计算）
+    ├── test-elites.js   # 精英怪类型 / 专属机制 / 图鉴分类的测试
+    ├── test-blackhole.js  # 黑洞 / 小镇 / 特殊能力 / 图鉴的回归测试
+    ├── test-debug-cmds.js # 控制台调试指令是否都可用
     ├── test-visibility.js # 切后台暂停 / BGM 清理的回归测试
-    └── test-blackhole.js  # 黑洞 / 小镇 / 特殊能力的回归测试
+    └── check-antipattern.js # 静态检查 (x || 默认值) - dt 这类计时器陷阱
 ```
 
-> `js/` 里的 11 个文件都是**经典 script**，按 `index.html` 中的顺序加载、共享同一个全局作用域，
-> 顺序不能随意调换（依赖顺序：工具函数 → 音频 → 核心逻辑 → 宠物扩展表 → 宠物表 → 数据表
-> → 绘制 → 界面 → 黑洞玩法 → 调试指令）。
-> 注意 `pets-extra.js` 必须排在 `pets.js` **之前**（后者求值时要读取 `PETS_EXTRA`）。
+> `js/` 里的 12 个文件都是**经典 script**，按 `index.html` 中的顺序加载、共享同一个全局作用域，
+> 顺序不能随意调换（依赖顺序：精英类型表 → 工具函数 → 音频 → 核心逻辑 → 宠物扩展表 → 宠物表
+> → 数据表 → 绘制 → 界面 → 黑洞玩法 → 调试指令）。
+> 注意 `elite-types.js` 必须排在最前、`pets-extra.js` 必须排在 `pets.js` **之前**
+> （后者求值时要读取 `PETS_EXTRA`）。
 
 ## 玩法说明
 
@@ -111,12 +116,35 @@ python -m http.server 8000
 
 ## 图鉴
 
-主菜单点 **📖 查看图鉴** 进入。图鉴会记录你**遇到过**的怪物与宠物：
+主菜单点 **📖 查看图鉴** 进入。图鉴收录**怪物**（宠物在「宠物蛋」界面里已有自己的图鉴，这里不重复）：
+
+- **普通怪物**（6 种）：基础近战 / 高速突进 / 群体虫潮 / 远程射手 / 重装坦克 / 自爆单位
+- **精英怪物**（9 种）：幽影 / 妖怪 / 僵尸 / 毛怪 / 吸血鬼 / 霸王龙 / 幽魂 / 树妖 / 石像鬼
+
+规则：
 
 - **已经遇到过**：正常显示图标、名字与关键数值，点卡片看详情
 - **还没遇到**：只显示一个灰色空框（❓ ???），不可点击
+- 顶部显示收集进度，共 **15** 条（普通 6 + 精英 9）
 
-顶部会显示收集进度（宠物 x/12、怪物 x/7）。怪物条目包含 6 种普通怪与 1 种精英怪。
+## 精英怪
+
+每 **10 级**刷新一只，击杀后所有小怪永久增强（每杀一只精英，精英血量 ×1.10）。
+生成时**随机抽一种类型**，外观、数值与机制都不同：
+
+| 精英 | 特点 | 专属机制 |
+| --- | --- | --- |
+| 👹 幽影 | 基准型 | 会蓄力冲撞 |
+| 🎭 妖怪 | 快而脆（血 ×0.85，速 ×1.30） | **瞬移**到你身边扑击 |
+| 🧟 僵尸 | 慢而韧（血 ×1.20，速 ×0.75） | **死后半血复活一次**，并炸开一片毒雾 |
+| 🦍 毛怪 | 厚实（血 ×1.70） | 挨打时有 25% 概率**把你冻住** |
+| 🧛 吸血鬼 | 灵活（速 ×1.15） | **吸血**：持续回复自身生命，冲撞时更快 |
+| 🦖 霸王龙 | 最强（血 ×2.40，伤 ×1.60，体型 ×1.55） | **咆哮**加速周围所有小怪 |
+| 👻 幽魂 | 脆而极快（血 ×0.70，速 ×1.45） | **远程冰弹**，命中会减速你 2.5 秒 |
+| 🌳 树妖 | 极肉极慢（血 ×2.10，速 ×0.62） | 周身**毒雾**，靠近持续掉血 |
+| 🗿 石像鬼 | 坚实（血 ×1.55） | **石甲**：受到伤害 −40%，免疫减速 |
+
+> 精英的血量用**圆环**环绕本体显示，不再是头顶的横条。
 
 ## 黑洞与回声小镇
 
@@ -161,13 +189,17 @@ python -m http.server 8000
 python tools/split.py          # 重新生成 index.html / css/ / js/（含所有修复补丁）
 python tools/verify.py         # 校验：产物与期望一致、源码一行不丢、node --check 通过
 node tools/smoke-test.js       # 运行时冒烟测试
-node tools/test-blackhole.js   # 黑洞/小镇/特殊能力回归测试
+node tools/test-blackhole.js   # 黑洞/小镇/特殊能力/图鉴回归测试
+node tools/test-elites.js      # 精英怪类型 / 专属机制 / 图鉴分类
+node tools/test-debug-cmds.js  # 调试指令是否都可用
 node tools/test-e2e.js         # 端到端：主循环 + 真实事件驱动整条链路
 node tools/test-visibility.js  # 切后台暂停回归测试
 node tools/stress-test.js      # 全技能 × 全变异压力测试
 node tools/audit-numbers.js    # 数值加成审计
 node tools/check-ids.js        # DOM id 一致性
 node tools/check-town-reach.js # 小镇 NPC / 出口可达性
+node tools/check-antipattern.js # 计时器 `(x || 默认值) - dt` 反模式
+node tools/count-content.js    # 内容清点（怪物/技能/宠物/道具数量）
 ```
 
 ### 试玩时的控制台快捷命令
@@ -183,7 +215,7 @@ dbgAllPets()      // 解锁全部 12 只生肖宠物（顺带送 9999 金币）
 dbgHatch()        // 直接孵化一只还没解锁的宠物（看孵化动画）
 dbgAllSkills()    // 拿满 6 个技能并全部升到 10 级
 dbgAllSpecials()  // 解锁全部特殊能力（含被动）
-dbgCodexAll()     // 图鉴全部点亮
+dbgCodexAll()     // 图鉴全部点亮（普通 6 + 精英 9）
 ```
 
 **数值与进度**
@@ -204,7 +236,10 @@ dbgPets('dragon','horse')   // 指定宠物出战（最多 2 只）
 dbgPetLv(11)                // 出战宠物设为 11 级（自动变异）
 dbgSpawn('tank', 5)         // 精确刷 5 只指定怪物
                             // 可用: normal/fast/swarm/ranged/tank/bomber
-dbgSpawn('elite')           // 刷一只精英怪
+dbgSpawn('elite')           // 随机刷一只精英
+dbgSpawn('elite:rex')       // 指定精英: 用 id 或中文名都行
+                            // shadow幽影 yokai妖怪 undead僵尸 yeti毛怪 vampire吸血鬼
+                            // rex霸王龙 wraith幽魂 treant树妖 gargoyle石像鬼
 dbgKillElite()              // 秒掉场上精英（测圆环血条与掉落）
 dbgClearFoes()              // 清空场上所有怪物
 ```
@@ -245,7 +280,8 @@ G.bh.timer = 1;   // 1 秒后刷出黑洞
 | v1.2.x | 加入**宠物系统**（生肖宠物蛋、孵化、出战） |
 | v1.3.x | 加入**多种怪物类型**（快速 / 虫群 / 远程 / 坦克 / 自爆） |
 | v1.5.3 | 加入**黑洞随机事件 + 回声小镇**（NPC 任务与带冷却的特殊能力） |
-| **v1.6.0** | **当前版本**：补齐**十二生肖宠物**、新增**图鉴**、精英血条改为**圆环** |
+| v1.6.0 | 补齐**十二生肖宠物**、新增**图鉴**、精英血条改为**圆环** |
+| **v1.7.0** | **当前版本**：新增 **8 种精英怪**、图鉴改为**普通/精英**两类 |
 
 > 版本号沿用原作者在手机上迭代时的命名。仓库的每次发布都在
 > [Tags](https://github.com/SmileFzr/endless-echo/tags) 里可以看到。

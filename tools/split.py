@@ -93,6 +93,8 @@ BLACKHOLE = "js/blackhole.js"
 PETS_EXTRA = "js/pets-extra.js"
 # 控制台调试指令: 手写模块, 必须排在所有脚本之后
 DEBUG_CMDS = "js/debug-cmds.js"
+# 精英类型表: 手写模块, 必须排在 skills.js 之前(后续脚本会引用 ELITE_TYPES)
+ELITE_TYPES = "js/elite-types.js"
 # 黑洞模块需要的 DOM 片段(插入到 <div id="toast"></div> 之后)
 TOWN_HTML = """<div id="townBar" class="hidden">
     <div class="town-head">
@@ -257,7 +259,7 @@ PATCHES = {
          '        <div class="hudbtns">'),
         # 主菜单显示版本号(以后改版本只需改这里)
         ('<button class="btn tiny" id="btnResetFromMenu">',
-         '<div class="ver" id="verTxt">v1.6.0</div>\n'
+         '<div class="ver" id="verTxt">v1.7.0</div>\n'
          '      <button class="btn tiny" id="btnResetFromMenu">'),
         # 主菜单加"查看图鉴"按钮
         ('<button class="btn" id="btnHelp">玩 法 说 明</button>',
@@ -385,6 +387,105 @@ PATCHES = {
         #     横幅结束后由 bhUpdateBanner() 补弹
         ("  if (G.pendingLvUps > 0 && G.state === 'playing') showLevelUp();",
          "  if (G.pendingLvUps > 0 && G.state === 'playing' && !(G.bh && G.bh.banner)) showLevelUp();"),
+        # 11a) 精英生成: 随机抽一种类型, 按其倍率与特性初始化
+        ("  enemies.push({\n"
+         "    type:'elite', x, y, vx:0, vy:0, r:t.r, size:t.size,\n"
+         "    hp: eliteHp, maxHp: eliteHp,\n"
+         "    speed: t.speed * (1 + G.diffCount * 0.04),\n"
+         "    dmg: t.dmg * (1 + G.diffCount * 0.08),\n"
+         "    exp:0, sprite:t.sprite, elite:true, dead:false, atkCd:0, flash:0, acid:0, burn:0\n"
+         "  });",
+         "  const def = ELITE_TYPES[(Math.random() * ELITE_TYPES.length) | 0];\n"
+         "  enemies.push({\n"
+         "    type:'elite', eliteDef:def.id, name:def.name, x, y, vx:0, vy:0,\n"
+         "    r: t.r * def.rMul, size: t.size * def.rMul,\n"
+         "    hp: eliteHp * def.hpMul, maxHp: eliteHp * def.hpMul,\n"
+         "    speed: t.speed * def.spdMul * (1 + G.diffCount * 0.04),\n"
+         "    dmg: t.dmg * def.dmgMul * (1 + G.diffCount * 0.08),\n"
+         "    exp:0, sprite:def.sprite, elite:true, dead:false, atkCd:0, flash:0, acid:0, burn:0,\n"
+         "    eliteTrait:def.trait, revived:false, shootCd:1.5, roarCd:4, poisonTick:0\n"
+         "  });"),
+        # 11b) 提示里带上精英名字
+        ("  toast('⚠ 精英怪降临！屏幕边缘有红色箭头');",
+         "  toast('⚠ 精英怪降临：' + def.name + '！屏幕边缘有红色箭头');"),
+        # 11c) 精英独有机制(实现在 blackhole.js 的 updateEliteTraits)
+        #      顺带修掉原有的 chargeCd 反模式: 原写法 (e.chargeCd || 3) 归零后会被 ||
+        #      重置成 3, 于是 <= 0 永不成立 —— 精英的蓄力冲撞从来没触发过。
+        #      (这个缺陷在原始单文件 game3.2.html 里就存在)
+        ("      e.chargeCd = (e.chargeCd || 3) - dt;\n"
+         "      if (e.chargeCd <= 0 && dist < 420) { e.chargeCd = 4.5; e.chargeT = 0.55; effects.push({ kind:'ring', x:e.x, y:e.y, life:0.4, max:0.4, r:110, col:'#ff5f6d' }); }\n"
+         "      if (e.chargeT > 0) {\n"
+         "        e.chargeT -= dt;\n"
+         "        e.x += (dx / dist) * e.speed * 4.5 * dt; e.y += (dy / dist) * e.speed * 4.5 * dt;\n"
+         "        // 冲锋期间持续刷新无敌帧, 避免一次冲锋被反复结算伤害\n"
+         "        if (P.invuln < 0.12) P.invuln = 0.12;\n"
+         "      }",
+         "      if (cdTick(e, 'chargeCd', dt) <= 0 && dist < 420) {\n"
+         "        e.chargeCd = 4.5; e.chargeT = 0.55;\n"
+         "        effects.push({ kind:'ring', x:e.x, y:e.y, life:0.4, max:0.4, r:110, col:'#ff5f6d' });\n"
+         "      }\n"
+         "      if (e.chargeT > 0) {\n"
+         "        e.chargeT -= dt;\n"
+         "        e.x += (dx / dist) * e.speed * 4.5 * dt; e.y += (dy / dist) * e.speed * 4.5 * dt;\n"
+         "        // 冲锋期间持续刷新无敌帧, 避免一次冲锋被反复结算伤害\n"
+         "        if (P.invuln < 0.12) P.invuln = 0.12;\n"
+         "      }\n"
+         "      if (typeof updateEliteTraits === 'function') updateEliteTraits(e, dt, dx, dy, dist);"),
+        # 11d) 石像鬼石甲: 受到伤害 -40%
+        ("  const d = Math.max(1, Math.round(dmg));\n"
+         "  e.hp -= d; e.flash = 0.09;",
+         "  if (e.eliteTrait === 'shield') dmg *= 0.6;\n"
+         "  const d = Math.max(1, Math.round(dmg));\n"
+         "  e.hp -= d; e.flash = 0.09;"),
+        # 11e) 僵尸: 第一次死亡会半血复活并炸出毒雾
+        ("function killEnemy(e) {\n  if (e.dead) return;",
+         "function killEnemy(e) {\n"
+         "  if (e.dead) return;\n"
+         "  if (e.elite && e.eliteTrait === 'undead' && !e.revived) {\n"
+         "    e.revived = true;\n"
+         "    e.hp = Math.max(1, Math.round(e.maxHp * 0.5));\n"
+         "    e.flash = 0.3;\n"
+         "    effects.push({ kind:'boom', x:e.x, y:e.y, life:0.5, max:0.5, r:150, col:'#8ef07a' });\n"
+         "    aoeDamage(e.x, e.y, 150, e.dmg * 0.8);\n"
+         "    if (Math.hypot(P.x - e.x, P.y - e.y) < 150 + P.r) damagePlayer(e.dmg * 0.6);\n"
+         "    toast('☠ ' + e.name + ' 又站起来了！');\n"
+         "    sfx('mut');\n"
+         "    return;\n"
+         "  }"),
+        # 11f) 精英类型查询与冷却推进(图鉴/调试/特性用)
+        ("function getHpScale() {",
+         "function eliteDefOf(id) {\n"
+         "  for (const d of ELITE_TYPES) if (d.id === id) return d;\n"
+         "  return ELITE_TYPES[0];\n"
+         "}\n"
+         "/* 推进一个冷却计时。必须用 undefined 判断, 不能写 (x || 默认值):\n"
+         "   因为 0 || 默认值 === 默认值, 会让归零后的冷却被重置, 永远触发不了。 */\n"
+         "function cdTick(obj, key, dt) {\n"
+         "  if (typeof obj[key] !== 'number') obj[key] = 0;\n"
+         "  obj[key] -= dt;\n"
+         "  return obj[key];\n"
+         "}\n"
+         "function getHpScale() {"),
+        # 11g) 冰弹减速: 作用在 recalcStats 的最终速度上, 并每帧递减
+        ("  P.dmgMult = dmg; P.speed = P.baseSpeed * spd; P.cdr = cdr; P.pickupRange = pick;",
+         "  P.dmgMult = dmg;\n"
+         "  P.speed = P.baseSpeed * spd * (P.slowT > 0 ? 0.55 : 1);   // 幽魂冰弹减速\n"
+         "  P.cdr = cdr; P.pickupRange = pick;"),
+        # 11h) 减速计时初值
+        ("invuln:0, hurtFlash:0,", "invuln:0, hurtFlash:0, slowT:0,"),
+        ("  if (P.hurtFlash > 0) P.hurtFlash -= dt;",
+         "  if (P.hurtFlash > 0) P.hurtFlash -= dt;\n"
+         "  if (P.slowT > 0) P.slowT -= dt;                   // 冰弹减速剩余时间"),
+        # 11i) 冰弹命中玩家 -> 减速(幽魂)
+        ("    if (dx * dx + dy * dy < (P.r + b.r) ** 2) { damagePlayer(b.dmg); eBullets.splice(i, 1); continue; }",
+         "    if (dx * dx + dy * dy < (P.r + b.r) ** 2) {\n"
+         "      damagePlayer(b.dmg);\n"
+         "      if (b.chill) {\n"
+         "        P.slowT = Math.max(P.slowT || 0, 2.5);\n"
+         "        effects.push({ kind:'ring', x:P.x, y:P.y, life:0.4, max:0.4, r:44, col:'#8ad4ff' });\n"
+         "      }\n"
+         "      eBullets.splice(i, 1); continue;\n"
+         "    }"),
     ],
     # 8) 生肖宠物扩展(兔/蛇/马/羊/猴/鸡/猪/牛): 由 js/pets-extra.js 提供,
     #    合并进 PETS 表, 让"12 生肖"名实相符
@@ -587,7 +688,8 @@ def tidy(rows):
 
 # ---------- 写文件 ----------
 manifest = [("css/style.css", "\n".join(css_body).strip("\n") + "\n" + TOWN_CSS)]
-script_order = []
+# 精英类型表排在最先(所有后续脚本地引用 ELITE_TYPES)
+script_order = ["elite-types.js"]
 for mod in used:
     filename, label = MODULE_HEADER[mod]
     body = "\n".join(tidy(module_lines[mod]))
@@ -605,6 +707,10 @@ with io.open(os.path.join(ROOT, BLACKHOLE), encoding="utf-8", newline="") as f:
 # 生肖宠物扩展表: 源码在 js/pets-extra.js, 必须紧跟 js/pets.js 之后加载
 with io.open(os.path.join(ROOT, PETS_EXTRA), encoding="utf-8", newline="") as f:
     manifest.append((PETS_EXTRA, f.read().replace("\r\n", "\n")))
+
+# 精英类型表: 手写模块
+with io.open(os.path.join(ROOT, ELITE_TYPES), encoding="utf-8", newline="") as f:
+    manifest.append((ELITE_TYPES, f.read().replace("\r\n", "\n")))
 
 # 控制台调试指令: 最后加载(依赖前面所有模块的全局函数)
 with io.open(os.path.join(ROOT, DEBUG_CMDS), encoding="utf-8", newline="") as f:
