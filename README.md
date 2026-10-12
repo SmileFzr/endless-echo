@@ -48,7 +48,8 @@ python -m http.server 8000
 │   ├── skills.js       # 技能表与属性表
 │   ├── render.js       # 全部 Canvas 绘制
 │   ├── ui.js           # DOM 界面交互与主循环
-│   └── blackhole.js    # 黑洞随机事件 + 回声小镇 + 特殊能力 + 图鉴（手写模块）
+│   ├── blackhole.js    # 黑洞随机事件 + 回声小镇 + 特殊能力 + 图鉴（手写模块）
+│   └── debug-cmds.js   # 控制台调试指令 dbg*（手写模块，最后加载）
 ├── versions/
 │   ├── README.md       # 单文件版本归档说明
 │   └── game3.2.html    # v1.5.3 的原始单文件（拆分来源）
@@ -62,9 +63,9 @@ python -m http.server 8000
     └── test-blackhole.js  # 黑洞 / 小镇 / 特殊能力的回归测试
 ```
 
-> `js/` 里的 10 个文件都是**经典 script**，按 `index.html` 中的顺序加载、共享同一个全局作用域，
+> `js/` 里的 11 个文件都是**经典 script**，按 `index.html` 中的顺序加载、共享同一个全局作用域，
 > 顺序不能随意调换（依赖顺序：工具函数 → 音频 → 核心逻辑 → 宠物扩展表 → 宠物表 → 数据表
-> → 绘制 → 界面 → 黑洞玩法）。
+> → 绘制 → 界面 → 黑洞玩法 → 调试指令）。
 > 注意 `pets-extra.js` 必须排在 `pets.js` **之前**（后者求值时要读取 `PETS_EXTRA`）。
 
 ## 玩法说明
@@ -171,13 +172,52 @@ node tools/check-town-reach.js # 小镇 NPC / 出口可达性
 
 ### 试玩时的控制台快捷命令
 
-进入游戏（点了「无尽模式」）后按 F12 打开控制台，可以直接用这些命令跳过前期：
+进入游戏（点了「无尽模式」）后按 **F12** 打开控制台。**先输入 `dbgHelp()` 可以列出全部指令**。
+
+> ⚠️ 弹窗提示 "Don't paste code" 时，按提示输入 `allow pasting` 再回车即可。
+
+**内容解锁** —— 不用慢慢刷
 
 ```js
-dbgBH()        // 立刻召唤一个黑洞（跳过"3 技能且 1 个到 3 级"的条件）
-dbgGoto()      // 传送到黑洞旁边，一步进入小镇
-dbgTown()      // 直接进城（不经过黑洞）
-dbgSpecials()  // 解锁全部特殊能力，之后按 1 / 2 就能用
+dbgAllPets()      // 解锁全部 12 只生肖宠物（顺带送 9999 金币）
+dbgHatch()        // 直接孵化一只还没解锁的宠物（看孵化动画）
+dbgAllSkills()    // 拿满 6 个技能并全部升到 10 级
+dbgAllSpecials()  // 解锁全部特殊能力（含被动）
+dbgCodexAll()     // 图鉴全部点亮
+```
+
+**数值与进度**
+
+```js
+dbgGold(20000)    // 给自己金币（默认 5000）
+dbgLv(20)         // 直接升到 20 级（会弹升级三选一）
+dbgLevelUp(3)     // 立刻弹 3 次升级三选一
+dbgGod(true)      // 无敌 + 秒杀（不传参数则在开/关之间切换）
+dbgHeal()         // 回满血 + 3 秒无敌
+dbgKills(30)      // 击杀数 +30（推进 NPC 委托用）
+```
+
+**宠物与怪物**
+
+```js
+dbgPets('dragon','horse')   // 指定宠物出战（最多 2 只）
+dbgPetLv(11)                // 出战宠物设为 11 级（自动变异）
+dbgSpawn('tank', 5)         // 精确刷 5 只指定怪物
+                            // 可用: normal/fast/swarm/ranged/tank/bomber
+dbgSpawn('elite')           // 刷一只精英怪
+dbgKillElite()              // 秒掉场上精英（测圆环血条与掉落）
+dbgClearFoes()              // 清空场上所有怪物
+```
+
+**场景跳转**
+
+```js
+dbgBH()      // 召唤黑洞（跳过"3 技能且 1 个到 3 级"的条件）
+dbgGoto()    // 传送到黑洞旁边，一步进入小镇
+dbgTown()    // 直接进入回声小镇
+dbgShop()    // 立刻打开传送商店
+dbgSeen()    // 查看图鉴当前已遇到的条目
+dbgHelp()    // 列出以上全部指令
 ```
 
 也可以手动构造条件：
@@ -186,6 +226,9 @@ dbgSpecials()  // 解锁全部特殊能力，之后按 1 / 2 就能用
 P.skills.push({id:'sword',lv:3,mut:null,cd:0}, {id:'bomb',lv:3,mut:null,cd:0});
 G.bh.timer = 1;   // 1 秒后刷出黑洞
 ```
+
+> 这些指令定义在 `js/debug-cmds.js` 与 `js/blackhole.js`，**只在控制台手动调用，不影响正常玩法**。
+> `tools/test-debug-cmds.js` 会验证它们全部可用。
 
 `tools/split.py` 顶部的 `SRC` 指向单文件版本 `game3.2.html`，需要按你的实际路径修改。
 

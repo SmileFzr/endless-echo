@@ -952,7 +952,7 @@ function codexDetail(kind, id) {
 }
 
 /* ============================================================
-   调试辅助(仅供试玩时在浏览器控制台使用, 不影响正常玩法)
+   黑洞相关的调试入口(供 js/debug-cmds.js 挂到 window)
    ============================================================ */
 
 /* 立刻召唤一个黑洞(走正常生成流程, 距离/寿命与正式玩法一致) */
@@ -964,6 +964,7 @@ function debugSpawnBlackHole() {
   G.bh.timer = 0;
   return '下一帧会在你附近生成黑洞';
 }
+
 /* 直接传送到黑洞旁边(等它生成后一步进城) */
 function debugGotoBlackHole() {
   if (!P) { console.warn('先点「无尽模式」开始游戏, 再执行这条命令'); return null; }
@@ -975,30 +976,4 @@ function debugGotoBlackHole() {
   };
   wait();
   return '正在传送到黑洞…';
-}
-
-/* 把黑洞/小镇相关的调试入口挂到 window, 方便控制台调用 */
-if (typeof window !== 'undefined') {
-  window.dbgBH = debugSpawnBlackHole;      // 召唤黑洞
-  window.dbgGoto = debugGotoBlackHole;     // 直接传送到黑洞
-  window.dbgTown = () => { if (P) enterTown(); };   // 直接进城
-  window.dbgSpecials = () => {             // 白送全部特殊能力
-    ensureSaveSlots();
-    for (const id of Object.keys(SPECIALS)) SAVE.specials[id] = true;
-    if (P) { P.specials = {}; for (const id of Object.keys(SPECIALS)) P.specials[id] = { cd: 0 }; }
-    syncSpecialBars();
-    toast('已解锁全部特殊能力');
-  };
-  window.dbgCodex = () => {                // 图鉴: 点亮全部条目
-    ensureSaveSlots();
-    SAVE.seenEnemies = Object.keys(ENEMY_TYPES).slice();
-    SAVE.seenPets = Object.keys(PETS).slice();
-    writeSave();
-    if (G.state === 'codex') renderCodex();
-    return '图鉴已全部点亮 (' + SAVE.seenEnemies.length + ' 怪 / ' + SAVE.seenPets.length + ' 宠物)';
-  };
-  window.dbgSeen = () => {                 // 查看当前已遇到的条目
-    ensureSaveSlots();
-    return { 怪物: seenList('enemy'), 宠物: seenList('pet') };
-  };
 }

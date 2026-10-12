@@ -91,6 +91,8 @@ UI_MARKER = "const el = id => document.getElementById(id);"
 BLACKHOLE = "js/blackhole.js"
 # 生肖宠物扩展表: 紧跟 js/pets.js 之后加载(源码 js/pets-extra.js)
 PETS_EXTRA = "js/pets-extra.js"
+# 控制台调试指令: 手写模块, 必须排在所有脚本之后
+DEBUG_CMDS = "js/debug-cmds.js"
 # 黑洞模块需要的 DOM 片段(插入到 <div id="toast"></div> 之后)
 TOWN_HTML = """<div id="townBar" class="hidden">
     <div class="town-head">
@@ -595,7 +597,7 @@ for mod in used:
         script_order.append("pets-extra.js")
     script_order.append(filename)
 
-# 黑洞小镇模块: 源码已存在于 js/blackhole.js, 作为最后一个脚本加载。
+# 黑洞小镇模块: 源码已存在于 js/blackhole.js。
 # 它不由本脚本生成, 但把它的当前内容也记进"期望内容", 这样 verify.py 能发现手工改动。
 with io.open(os.path.join(ROOT, BLACKHOLE), encoding="utf-8", newline="") as f:
     manifest.append((BLACKHOLE, f.read().replace("\r\n", "\n")))
@@ -604,8 +606,13 @@ with io.open(os.path.join(ROOT, BLACKHOLE), encoding="utf-8", newline="") as f:
 with io.open(os.path.join(ROOT, PETS_EXTRA), encoding="utf-8", newline="") as f:
     manifest.append((PETS_EXTRA, f.read().replace("\r\n", "\n")))
 
-# 黑洞小镇模块: 源码已存在于 js/blackhole.js, 作为最后一个脚本加载
+# 控制台调试指令: 最后加载(依赖前面所有模块的全局函数)
+with io.open(os.path.join(ROOT, DEBUG_CMDS), encoding="utf-8", newline="") as f:
+    manifest.append((DEBUG_CMDS, f.read().replace("\r\n", "\n")))
+
+# 黑洞小镇模块: 源码已存在于 js/blackhole.js
 script_order.append("blackhole.js")
+script_order.append("debug-cmds.js")
 
 html = []
 html.extend(lines[:style_open - 1])                 # <!DOCTYPE ... <title>

@@ -47,8 +47,8 @@ def flat(s):
 html = rd("index.html")
 order = re.findall(r'<script src="js/([^"]+)"></script>', html)
 FROM_SOURCE = ["utils.js", "audio.js", "game.js", "pets.js", "skills.js", "render.js", "ui.js"]
-EXTRA = ["pets-extra.js", "blackhole.js"]    # 手写模块 / 扩展数据表, 不在原始单文件里
-# 按加载顺序校验(宠物扩展表在 pets.js 之前)
+# 手写模块 / 扩展数据表, 不在原始单文件里
+EXTRA = ["pets-extra.js", "blackhole.js", "debug-cmds.js"]
 assert sorted(order) == sorted(FROM_SOURCE + EXTRA), order
 
 ok = True
