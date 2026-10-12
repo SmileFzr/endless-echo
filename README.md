@@ -1,10 +1,11 @@
 # 无尽回响 · Endless Echo
 
 [![在线试玩](https://img.shields.io/badge/▶_在线试玩-点这里开始-7c3aed?style=for-the-badge)](https://smilefzr.github.io/endless-echo/)
+[![版本](https://img.shields.io/badge/版本-v1.5.3-ffd76a?style=flat-square)](#版本历史)
 [![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-已部署-22c55e?style=flat-square)](https://smilefzr.github.io/endless-echo/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-**🎮 直接开始玩：<https://smilefzr.github.io/endless-echo/>**
+**🎮 直接开始玩：<https://smilefzr.github.io/endless-echo/>**　（当前版本 **v1.5.3**）
 
 一个纯前端（零依赖、零构建）的 Roguelike 生存小游戏。手机、平板、桌面浏览器都能直接玩。
 
@@ -156,6 +157,19 @@ G.bh.timer = 1;   // 1 秒后刷出黑洞
 > 注意：`game3.2.html` 里的少量缺陷是**在 `tools/split.py` 的 `PATCHES` 表里修复的**
 > （切后台暂停、BGM 定时器泄漏、永久强化重复计算、经验阈值等）。
 > 重新运行 `split.py` 会自动带上这些修复；产物中 `js/blackhole.js` 是手写模块，不由拆分生成。
+
+## 版本历史
+
+| 版本 | 主要变化 |
+| --- | --- |
+| v1.0.x | 最初版本：只有普通小怪，基础生存玩法 |
+| v1.1.x | 加入**精英怪**（每 10 级刷新，击杀后小怪永久增强） |
+| v1.2.x | 加入**宠物系统**（生肖宠物蛋、孵化、出战） |
+| v1.3.x | 加入**多种怪物类型**（快速 / 虫群 / 远程 / 坦克 / 自爆） |
+| **v1.5.3** | **当前版本**：加入**黑洞随机事件 + 回声小镇**（NPC 任务与带冷却的特殊能力） |
+
+> 版本号沿用原作者在手机上迭代时的命名。仓库的每次发布都在
+> [Tags](https://github.com/SmileFzr/endless-echo/tags) 里可以看到。
 
 ## 兼容性
 

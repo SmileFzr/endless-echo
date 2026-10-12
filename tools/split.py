@@ -150,6 +150,9 @@ TOWN_CSS = """
     border-radius:0 10px 10px 0;padding:10px 12px;color:#dcdcf0}
   .dlg .dlgmeta{font-size:11.5px;opacity:.7;margin-top:8px}
   #dlgActions .btn{margin-top:10px}
+  /* 主菜单底部的版本号 */
+  .ver{font-size:10.5px;opacity:.28;letter-spacing:1px;margin-top:10px;
+    font-family:ui-monospace,Menlo,Consolas,monospace}
   /* 窄屏(手机竖屏)下让特殊能力条独占一行, 避免和技能栏挤在一起 */
   @media (max-width:430px){
     #hudSpecials{flex:1 0 100%;justify-content:flex-start;margin-top:4px}
@@ -211,6 +214,10 @@ PATCHES = {
         ('<div class="hudbtns">',
          '<div id="hudSpecials"></div>\n'
          '        <div class="hudbtns">'),
+        # 主菜单显示版本号(以后改版本只需改这里)
+        ('<button class="btn tiny" id="btnResetFromMenu">',
+         '<div class="ver" id="verTxt">v1.5.3</div>\n'
+         '      <button class="btn tiny" id="btnResetFromMenu">'),
     ],
     # 2) BGM 调度器用 setInterval 创建后从无清理入口: 静音/切后台后仍每 40ms
     #    创建振荡器节点空转; 切后台时浏览器还会限流导致恢复后音频卡顿

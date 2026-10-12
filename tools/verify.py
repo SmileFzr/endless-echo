@@ -137,6 +137,7 @@ extra_ok = set(town_html) | {'<div id="hudSpecials"></div>'}
 unexpected = [l for l in got
               if l not in want and l not in extra_ok
               and 'expTxt' not in l                      # 有意的经验阈值修正 0/8 -> 0/7
+              and 'verTxt' not in l                      # 主菜单版本号(由 PATCHES 注入)
               and not (flat(l) in {flat(x) for x in want} or flat(l) in {flat(x) for x in extra_ok})]
 lost = [l for l in sig("\n".join(exp))
         if l not in got and 'expTxt' not in l]
