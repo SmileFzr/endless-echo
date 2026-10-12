@@ -52,8 +52,9 @@ vm.runInContext(order.map(n => fs.readFileSync(path.join(ROOT, 'js', n), 'utf8')
 const g = vm.runInContext(`({
   get G(){ return G; }, get P(){ return P; }, get SAVE(){ return SAVE; }, set SAVE(v){ SAVE = v; },
   ELITE_TYPES, ENEMY_TYPES, PETS, startGame, spawnElite, updateEliteTraits, hurtEnemy, killEnemy,
-  eliteDefOf, openCodex, renderCodex, dbgCodexAll, updateEnemies, el,
+  eliteDefOf, isEliteId, openCodex, renderCodex, codexDetail, dbgCodexAll, updateEnemies, el,
   get enemies(){ return enemies; }, get eBullets(){ return eBullets; },
+  get window(){ return window; },
   seenList: k => seenList(k), markSeen: (k, id) => markSeen(k, id)
 })`, ctx);
 
@@ -245,7 +246,68 @@ resetGame();
 }
 
 console.log('');
-console.log('=== 4. 图鉴: 只收怪物, 分普通/精英两类 ===');
+console.log('=== 4. 击杀了精英, 图鉴要能记录(修复前记录的是 e.type=\'elite\') ===');
+resetGame();
+{
+  // 复现用户的操作: dbgGod(true) + dbgSpawn('elite:rex') 然后打死
+  g.window.dbgGod(true);
+  const msg = g.window.dbgSpawn('elite:rex');
+  ok(/霸王龙/.test(msg), 'dbgSpawn(elite:rex) 刷出了霸王龙');
+  const rex = g.enemies.find(e => e.elite && e.eliteDef === 'rex');
+  ok(!!rex, '场上确实有霸王龙');
+  let seen = g.seenList('enemy');
+  ok(seen.indexOf('rex') >= 0, '精英一出现就记进图鉴: ' + seen.join(','));
+  // 打死它
+  g.hurtEnemy(rex, 1e9);
+  g.killEnemy(rex);
+  ok(rex.dead === true, '霸王龙已被击杀');
+  seen = g.seenList('enemy');
+  ok(seen.indexOf('rex') >= 0, '击杀后图鉴里仍有 rex');
+  ok(seen.indexOf('elite') < 0, '没有把无意义的 "elite" 记进去');
+  g.window.dbgGod(false);
+
+  // 返回主菜单再进图鉴(模拟用户的路径)
+  g.G.state = 'menu';
+  g.openCodex();
+  const b2 = elements.get('codexBody');
+  const list2 = [];
+  (function walk(n) { for (const c of n.children) { if (c.className && c.className.indexOf('codexitem') >= 0) list2.push(c); walk(c); } })(b2);
+  const rexCard = list2.find(c => (c.innerHTML || '').indexOf('霸王龙') >= 0);
+  ok(!!rexCard, '图鉴里出现了霸王龙条目');
+  ok(rexCard && rexCard.className.indexOf('locked') < 0, '霸王龙条目是点亮状态(不是灰框)');
+  const litCount = list2.filter(c => c.className.indexOf('locked') < 0).length;
+  ok(litCount >= 1, '至少点亮了 ' + litCount + ' 条');
+}
+
+console.log('');
+console.log('=== 5. 精英卡片点了要有介绍 ===');
+{
+  const detail = elements.get('codexDetail');
+  detail.innerHTML = '';
+  // 逐个精英都点一遍
+  const missing = [];
+  for (const d of E) {
+    detail.innerHTML = '';
+    g.codexDetail('enemy', d.id);
+    const html = detail.innerHTML || '';
+    if (!html || html.indexOf(d.name) < 0 || html.indexOf(d.desc) < 0) missing.push(d.name);
+  }
+  ok(missing.length === 0, '9 种精英点开都有名字与机制介绍' + (missing.length ? ' (缺: ' + missing.join(',') + ')' : ''));
+  // 抽查一个, 看数值与机制都在
+  detail.innerHTML = '';
+  g.codexDetail('enemy', 'rex');
+  const rh = detail.innerHTML || '';
+  ok(rh.indexOf('霸王龙') >= 0, '详情里有名字');
+  ok(rh.indexOf('×2.40') >= 0, '详情里有血量倍率 ×2.40');
+  ok(rh.indexOf('咆哮加速周围小怪') >= 0, '详情里有专属机制说明');
+  // 普通怪仍然正常
+  detail.innerHTML = '';
+  g.codexDetail('enemy', 'tank');
+  ok((detail.innerHTML || '').indexOf('tank') >= 0, '普通怪详情仍然正常');
+}
+
+console.log('');
+console.log('=== 6. 图鉴: 只收怪物, 分普通/精英两类 ===');
 resetGame();
 g.dbgCodexAll();
 g.openCodex();

@@ -929,6 +929,11 @@ function renderCodex() {
   codexDetail('enemy', normal.find(k => seenE.indexOf(k) >= 0) || null);
 }
 
+/* 判断一个 id 是不是精英类型(shadow/yokai/... 而不是普通怪) */
+function isEliteId(id) {
+  return ELITE_TYPES.some(d => d.id === id);
+}
+
 function codexDetail(kind, id) {
   const box = el('codexDetail');
   if (!box) return;
@@ -943,6 +948,18 @@ function codexDetail(kind, id) {
     box.innerHTML = '<div class="cdname">' + p.emoji + ' ' + p.name + ' · <span class="cdskill">' + p.skill + '</span></div>' +
       '<div class="cdrow">' + p.desc + '</div>' +
       '<div class="cdrow" style="color:#ffb347;margin-top:3px">🐾 变异：' + p.mutText + '</div>';
+  } else if (isEliteId(id)) {
+    // 精英: 数值 = 基准值 × 该类型的倍率; 简介用 ELITE_TYPES 里的 desc
+    const d = eliteDefOf(id);
+    const b = ENEMY_TYPES.elite;
+    const r1 = (v) => Math.round(v * 10) / 10;
+    box.innerHTML = '<div class="cdname">' + d.sprite + ' ' + d.name + ' · <span class="cdskill">精英怪</span></div>' +
+      '<div class="cdrow">生命 ' + Math.round(b.hp * d.hpMul) + '（×' + d.hpMul.toFixed(2) + '）' +
+      '　速度 ' + r1(b.speed * d.spdMul) + '（×' + d.spdMul.toFixed(2) + '）</div>' +
+      '<div class="cdrow" style="margin-top:2px">接触伤害 ' + Math.round(b.dmg * d.dmgMul) +
+      '（×' + d.dmgMul.toFixed(2) + '）　体型 ×' + d.rMul.toFixed(2) + '</div>' +
+      '<div class="cdrow" style="color:#ffb347;margin-top:3px">✦ ' + d.desc + '</div>' +
+      '<div class="cdrow" style="color:#9aa4b2;margin-top:2px">每 10 级随机刷出一种；击杀后小怪永久强化</div>';
   } else {
     const t = ENEMY_TYPES[id];
     if (!t) return;

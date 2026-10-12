@@ -259,7 +259,7 @@ PATCHES = {
          '        <div class="hudbtns">'),
         # 主菜单显示版本号(以后改版本只需改这里)
         ('<button class="btn tiny" id="btnResetFromMenu">',
-         '<div class="ver" id="verTxt">v1.7.2</div>\n'
+         '<div class="ver" id="verTxt">v1.7.3</div>\n'
          '      <button class="btn tiny" id="btnResetFromMenu">'),
         # 主菜单加"查看图鉴"按钮
         ('<button class="btn" id="btnHelp">玩 法 说 明</button>',
@@ -347,9 +347,11 @@ PATCHES = {
          "      }\n"
          "    }"),
         # 4a5) 记录"见过的怪物"(图鉴用)
+        #      精英必须记具体类型(rex/undead/...), 因为 e.type 永远是 'elite',
+        #      而图鉴查的是具体 id, 记 e.type 会导致精英永远点不亮。
         ("  e.dead = true; G.kills++; sfx('kill');",
          "  e.dead = true; G.kills++; sfx('kill');\n"
-         "  markSeen('enemy', e.type);   // 图鉴: 见过即记录"),
+         "  markSeen('enemy', e.elite ? e.eliteDef : e.type);   // 图鉴: 见过即记录"),
         ("  if (enemies.length > 320) return;\n  for (let i = 0; i < count; i++) spawnOne();",
          "  for (let i = 0; i < count; i++) { if (enemies.length >= 320) break; spawnOne(); }"),
         # 4c) 精英怪冲锋没有无敌帧, 一次冲锋可能连续撞中两次
@@ -404,7 +406,8 @@ PATCHES = {
          "    dmg: t.dmg * def.dmgMul * (1 + G.diffCount * 0.08),\n"
          "    exp:0, sprite:def.sprite, elite:true, dead:false, atkCd:0, flash:0, acid:0, burn:0,\n"
          "    eliteTrait:def.trait, revived:false, shootCd:1.5, roarCd:4, poisonTick:0\n"
-         "  });"),
+         "  });\n"
+         "  markSeen('enemy', def.id);   // 图鉴: 精英一出现就算遇到过"),
         # 11b) 提示里带上精英名字
         ("  toast('⚠ 精英怪降临！屏幕边缘有红色箭头');",
          "  toast('⚠ 精英怪降临：' + def.name + '！屏幕边缘有红色箭头');"),

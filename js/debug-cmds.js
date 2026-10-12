@@ -129,13 +129,16 @@ function dbgSpawn(type, n) {      // 刷怪: dbgSpawn('tank',5) / dbgSpawn('elit
     }
     // 不指定类型时随机; 指定了就一直抽到该类型为止
     for (let i = 0; i < (wantDef ? 400 : 1); i++) {
+      // 抽错的会被 pop 丢掉, 但 spawnElite() 已经把它们记进图鉴了 —— 先备份再还原
+      const seenBefore = SAVE.seenEnemies ? SAVE.seenEnemies.slice() : null;
       spawnElite();
       const e = enemies[enemies.length - 1];
       if (!wantDef || e.eliteDef === wantDef.id) {
         return '已刷新 ' + e.sprite + e.name + ' (血 ' + Math.round(e.maxHp) +
                ' / 速 ' + Math.round(e.speed) + ' / 机制 ' + (e.eliteTrait || '冲撞') + ')';
       }
-      enemies.pop();   // 抽错了丢回去重抽
+      enemies.pop();                              // 抽错了丢回去重抽
+      if (seenBefore) SAVE.seenEnemies = seenBefore;   // 顺便把它从图鉴记录里撤掉
     }
     return '没能刷出指定的精英: ' + want;
   }

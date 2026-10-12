@@ -148,7 +148,7 @@ function killEnemy(e) {
     return;
   }
   e.dead = true; G.kills++; sfx('kill');
-  markSeen('enemy', e.type);   // 图鉴: 见过即记录
+  markSeen('enemy', e.elite ? e.eliteDef : e.type);   // 图鉴: 见过即记录
   if (e.elite) { G.eliteAlive = false; onEliteKilled(e); return; }
   if (orbs.length < 200) {
     const n = e.exp;
@@ -194,6 +194,7 @@ function spawnElite() {
     exp:0, sprite:def.sprite, elite:true, dead:false, atkCd:0, flash:0, acid:0, burn:0,
     eliteTrait:def.trait, revived:false, shootCd:1.5, roarCd:4, poisonTick:0
   });
+  markSeen('enemy', def.id);   // 图鉴: 精英一出现就算遇到过
   G.eliteAlive = true;
   toast('⚠ 精英怪降临：' + def.name + '！屏幕边缘有红色箭头');
   G.shake = 12; sfx('elite');
