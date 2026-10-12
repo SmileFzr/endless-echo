@@ -150,15 +150,20 @@ function buyShop(it, price) {
 el('btnShopClose').onclick = () => { el('shop').classList.add('hidden'); G.state = 'playing'; };
 let toastT = 0;
 function toast(msg) { const t = el('toast'); t.textContent = msg; t.style.opacity = '1'; clearTimeout(toastT); toastT = setTimeout(() => { t.style.opacity = '0'; }, 1800); }
-function pauseGame() {
+function pauseGame(smart) {
+  // smart 模式仅在"离开时间很短"时静默暂停, 不弹菜单(避免误触打断)
   if (G.state !== 'playing' && G.state !== 'levelup' && G.state !== 'shop') return;
+  G._silent = !!smart;
   G._prevState = (G.state === 'playing') ? 'playing' : G.state;
   G.state = 'paused';
   el('levelup').classList.add('hidden'); el('shop').classList.add('hidden');
-  el('pauseVeil').classList.remove('hidden');
+  if (!G._silent) el('pauseVeil').classList.remove('hidden');
   if (audioReady && musicOn) musicGain.gain.value = 0.08;
 }
-function resumeGame() {
+function resumeGame(force) {
+  // 因切后台而自动暂停的, 由 visibilitychange 统一处理; 这里响应手动"继续"
+  if (!force && G._autoPaused) return;
+  G._silent = false;
   el('pauseVeil').classList.add('hidden');
   const prev = G._prevState || 'playing';
   G._prevState = null;
@@ -166,6 +171,42 @@ function resumeGame() {
   else if (prev === 'shop') openShop();
   else G.state = 'playing';
   if (audioReady && musicOn) musicGain.gain.value = 0.26;
+}
+// 切后台/锁屏时自动暂停(同时 audio.js 会停掉 BGM 调度器)
+// 离开 <3 秒: 视为误触, 静默暂停, 回来直接继续, 不打断操作
+// 离开 >=3 秒: 停下来等玩家点"继续", 免得回来发现角色已经死了
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (G.state === 'playing') {
+        G._autoPaused = true;
+        G._hiddenAt = performance.now();
+        pauseGame(true);          // 先静默暂停, 不弹菜单
+        clearTimeout(G._pauseReveal);
+        G._silent = true;
+        // 真的离开久了, 再把暂停菜单显示出来
+        G._pauseReveal = setTimeout(() => {
+          if (G._autoPaused && G.state === 'paused') {
+            G._silent = false;
+            el('pauseVeil').classList.remove('hidden');
+          }
+        }, 3000);
+      }
+    } else if (G._autoPaused) {
+      clearTimeout(G._pauseReveal);
+      G._autoPaused = false;
+      const away = performance.now() - (G._hiddenAt || 0);
+      if (G.state === 'paused' && G._silent && away < 3000) {
+        G._silent = false;
+        G.state = 'playing';                       // 短暂离开: 直接继续
+        el('pauseVeil').classList.add('hidden');
+        if (audioReady && musicOn) musicGain.gain.value = 0.26;
+      } else if (G.state === 'paused') {
+        G._silent = false;
+        el('pauseVeil').classList.remove('hidden');  // 离开久了: 等玩家点继续
+      }
+    }
+  });
 }
 function backToMenu() {
   el('pauseVeil').classList.add('hidden'); el('resetVeil').classList.add('hidden');

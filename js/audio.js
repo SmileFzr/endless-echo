@@ -24,7 +24,8 @@ function playKick(t) { const o = actx.createOscillator(), g = actx.createGain();
 function playHat(t) { const s = actx.createBufferSource(); s.buffer = noiseBuffer(); const f = actx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7200; const g = actx.createGain(); g.gain.setValueAtTime(0.09, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.035); s.connect(f); f.connect(g); g.connect(musicGain); s.start(t); s.stop(t + 0.05); }
 function playSnare(t) { const s = actx.createBufferSource(); s.buffer = noiseBuffer(); const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 0.8; const g = actx.createGain(); g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.13); s.connect(f); f.connect(g); g.connect(musicGain); s.start(t); s.stop(t + 0.15); }
 function startMusic() { if (!audioReady || musicTimer) return; musicStep = 0; musicNextTime = actx.currentTime + 0.12; musicTimer = setInterval(musicScheduler, 40); }
-function musicScheduler() { if (!audioReady || !musicOn) return; if (actx.state !== 'running') return; while (musicNextTime < actx.currentTime + 0.22) { const s = musicStep; const b = TRACK_BASS[s]; if (b) playNote(b, musicNextTime, STEP_DUR * 0.92, 'triangle', 0.16, musicGain); const l = TRACK_LEAD[s]; if (l) playNote(l, musicNextTime, STEP_DUR * 0.72, 'square', 0.062, musicGain); const d = TRACK_DRUM[s]; if (d === 1) playKick(musicNextTime); else if (d === 2) playHat(musicNextTime); else if (d === 3) playSnare(musicNextTime); musicNextTime += STEP_DUR; musicStep = (musicStep + 1) % MUSIC_LEN; } }
+function stopMusic() { if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } }
+function musicScheduler() { if (!audioReady || !musicOn) { stopMusic(); return; } if (typeof document !== 'undefined' && document.hidden) { stopMusic(); return; } if (actx.state !== 'running') return; while (musicNextTime < actx.currentTime + 0.22) { const s = musicStep; const b = TRACK_BASS[s]; if (b) playNote(b, musicNextTime, STEP_DUR * 0.92, 'triangle', 0.16, musicGain); const l = TRACK_LEAD[s]; if (l) playNote(l, musicNextTime, STEP_DUR * 0.72, 'square', 0.062, musicGain); const d = TRACK_DRUM[s]; if (d === 1) playKick(musicNextTime); else if (d === 2) playHat(musicNextTime); else if (d === 3) playSnare(musicNextTime); musicNextTime += STEP_DUR; musicStep = (musicStep + 1) % MUSIC_LEN; } }
 const SFX_GAP = { shoot: 0.055, hit: 0.05, kill: 0.09, coin: 0.09, hurt: 0.18, levelup: 0.4, elite: 0.8, eliteKill: 0.6, shop: 0.4, mut: 0.4, over: 1.0, win: 1.0 };
 const _sfxLast = {};
 function tone(freq, dur, type, vol, slideTo, delay) { const t = actx.currentTime + (delay || 0); const o = actx.createOscillator(), g = actx.createGain(); o.type = type || 'square'; o.frequency.setValueAtTime(freq, t); if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0006, t + dur); o.connect(g); g.connect(sfxGain); o.start(t); o.stop(t + dur + 0.03); }
@@ -51,3 +52,9 @@ function sfx(name) {
 }
 document.addEventListener('pointerdown', initAudio);
 document.addEventListener('keydown', initAudio);
+// 切到后台时停掉 BGM 调度器, 回到前台再平滑续上
+document.addEventListener('visibilitychange', () => {
+  if (!audioReady) return;
+  if (document.hidden) stopMusic();
+  else if (musicOn && actx.state === 'running') startMusic();
+});

@@ -15,6 +15,7 @@
 第一个分节之前的内容                    -> utils.js (常量与工具函数)
 """
 import io
+import json
 import os
 import re
 
@@ -128,6 +129,97 @@ BANNER = ("/* ============================================================\n"
           "   无尽回响 Endless Echo\n"
           "   ============================================================ */\n")
 
+# ---------------------------------------------------------------
+# 对拆分结果应用的修复(不改动原始单文件, 但每次重新拆分都会自动带上)
+# ---------------------------------------------------------------
+PATCHES = {
+    # 1) HTML 里写死的经验阈值 "0 / 8" 与游戏公式 expForLevel(1)=7 不一致
+    "index.html": [
+        ('<span id="expTxt">0 / 8</span>',
+         '<span id="expTxt">0 / 7</span>'),
+    ],
+    # 2) BGM 调度器用 setInterval 创建后从无清理入口: 静音/切后台后仍每 40ms
+    #    创建振荡器节点空转; 切后台时浏览器还会限流导致恢复后音频卡顿
+    "js/audio.js": [
+        ("function startMusic() { if (!audioReady || musicTimer) return; musicStep = 0; "
+         "musicNextTime = actx.currentTime + 0.12; musicTimer = setInterval(musicScheduler, 40); }",
+         "function startMusic() { if (!audioReady || musicTimer) return; musicStep = 0; "
+         "musicNextTime = actx.currentTime + 0.12; musicTimer = setInterval(musicScheduler, 40); }\n"
+         "function stopMusic() { if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } }"),
+        ("function musicScheduler() { if (!audioReady || !musicOn) return; if (actx.state !== 'running') return;",
+         "function musicScheduler() { if (!audioReady || !musicOn) { stopMusic(); return; } "
+         "if (typeof document !== 'undefined' && document.hidden) { stopMusic(); return; } "
+         "if (actx.state !== 'running') return;"),
+        ("document.addEventListener('keydown', initAudio);",
+         "document.addEventListener('keydown', initAudio);\n"
+         "// 切到后台时停掉 BGM 调度器, 回到前台再平滑续上\n"
+         "document.addEventListener('visibilitychange', () => {\n"
+         "  if (!audioReady) return;\n"
+         "  if (document.hidden) stopMusic();\n"
+         "  else if (musicOn && actx.state === 'running') startMusic();\n"
+         "});"),
+    ],
+    # 3) 切到后台/锁屏时游戏不会暂停: 生存类游戏里玩家回来后往往已经死了。
+    #    策略: 切走就暂停(一定不会白死); 离开不到 3 秒且没弹菜单的, 回来静默继续;
+    #    离开久了或已经弹出暂停菜单的, 等玩家自己点继续。手动暂停不受影响。
+    "js/ui.js": [
+        ("function pauseGame() {\n  if (G.state !== 'playing' && G.state !== 'levelup' && G.state !== 'shop') return;",
+         "function pauseGame(smart) {\n"
+         "  // smart 模式仅在\"离开时间很短\"时静默暂停, 不弹菜单(避免误触打断)\n"
+         "  if (G.state !== 'playing' && G.state !== 'levelup' && G.state !== 'shop') return;\n"
+         "  G._silent = !!smart;"),
+        ("  el('pauseVeil').classList.remove('hidden');\n  if (audioReady && musicOn) musicGain.gain.value = 0.08;\n}",
+         "  if (!G._silent) el('pauseVeil').classList.remove('hidden');\n"
+         "  if (audioReady && musicOn) musicGain.gain.value = 0.08;\n}"),
+        ("function resumeGame() {\n  el('pauseVeil').classList.add('hidden');",
+         "function resumeGame(force) {\n"
+         "  // 因切后台而自动暂停的, 由 visibilitychange 统一处理; 这里响应手动\"继续\"\n"
+         "  if (!force && G._autoPaused) return;\n"
+         "  G._silent = false;\n"
+         "  el('pauseVeil').classList.add('hidden');"),
+        ("  if (audioReady && musicOn) musicGain.gain.value = 0.26;\n}\nfunction backToMenu()",
+         "  if (audioReady && musicOn) musicGain.gain.value = 0.26;\n"
+         "}\n"
+         "// 切后台/锁屏时自动暂停(同时 audio.js 会停掉 BGM 调度器)\n"
+         "// 离开 <3 秒: 视为误触, 静默暂停, 回来直接继续, 不打断操作\n"
+         "// 离开 >=3 秒: 停下来等玩家点\"继续\", 免得回来发现角色已经死了\n"
+         "if (typeof document !== 'undefined') {\n"
+         "  document.addEventListener('visibilitychange', () => {\n"
+         "    if (document.hidden) {\n"
+         "      if (G.state === 'playing') {\n"
+         "        G._autoPaused = true;\n"
+         "        G._hiddenAt = performance.now();\n"
+         "        pauseGame(true);          // 先静默暂停, 不弹菜单\n"
+         "        clearTimeout(G._pauseReveal);\n"
+         "        G._silent = true;\n"
+         "        // 真的离开久了, 再把暂停菜单显示出来\n"
+         "        G._pauseReveal = setTimeout(() => {\n"
+         "          if (G._autoPaused && G.state === 'paused') {\n"
+         "            G._silent = false;\n"
+         "            el('pauseVeil').classList.remove('hidden');\n"
+         "          }\n"
+         "        }, 3000);\n"
+         "      }\n"
+         "    } else if (G._autoPaused) {\n"
+         "      clearTimeout(G._pauseReveal);\n"
+         "      G._autoPaused = false;\n"
+         "      const away = performance.now() - (G._hiddenAt || 0);\n"
+         "      if (G.state === 'paused' && G._silent && away < 3000) {\n"
+         "        G._silent = false;\n"
+         "        G.state = 'playing';                       // 短暂离开: 直接继续\n"
+         "        el('pauseVeil').classList.add('hidden');\n"
+         "        if (audioReady && musicOn) musicGain.gain.value = 0.26;\n"
+         "      } else if (G.state === 'paused') {\n"
+         "        G._silent = false;\n"
+         "        el('pauseVeil').classList.remove('hidden');  // 离开久了: 等玩家点继续\n"
+         "      }\n"
+         "    }\n"
+         "  });\n"
+         "}\n"
+         "function backToMenu()"),
+    ],
+}
+
 
 def tidy(rows):
     """去掉首尾空行, 连续空行压缩为一行"""
@@ -168,10 +260,46 @@ html.append('</body>')
 html.append('</html>')
 manifest.insert(1, ("index.html", "\n".join(html).rstrip("\n") + "\n"))
 
+# ---------- 应用修复补丁 ----------
+patch_meta = []
+for rel, rules in PATCHES.items():
+    paths = [p for p, _ in manifest]
+    if rel not in paths:
+        raise SystemExit("补丁目标文件不存在: %s" % rel)
+    idx = paths.index(rel)
+    content = manifest[idx][1]
+    for old, new in rules:
+        if old not in content:
+            raise SystemExit("补丁未匹配(源码可能已改动): %s -> %s" %
+                             (rel, old.split("\n")[0][:60]))
+        if content.count(old) != 1:
+            raise SystemExit("补丁匹配到多处, 需更精确: %s" % rel)
+        content = content.replace(old, new, 1)
+        # 记录被替换掉的行, 供 verify.py 核对"没有牵连其它代码"
+        patch_meta.append({
+            "file": rel,
+            "replaced": [l.rstrip() for l in old.split("\n") if l.strip()],
+        })
+    manifest[idx] = (rel, content)
+print("已应用 %d 个文件的修复补丁(共 %d 处替换)" %
+      (len(PATCHES), len(patch_meta)))
+
+# 把补丁元信息与期望内容一起留档, 供 verify.py 核对
+meta_path = os.path.join(ROOT, ".build", "_patches.json")
+os.makedirs(os.path.dirname(meta_path), exist_ok=True)
+with io.open(meta_path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(json.dumps(patch_meta, ensure_ascii=False, indent=2) + "\n")
+
 for path, content in manifest:
     out = os.path.join(ROOT, path.replace("/", os.sep))
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with io.open(out, "w", encoding="utf-8", newline="\n") as f:
+        f.write(content)
+    # 同时把"期望内容"留一份到 .build/, 供 verify.py 做逐字节比对
+    # (该目录已在 .gitignore 中, 不会提交)
+    ref = os.path.join(ROOT, ".build", path.replace("/", os.sep))
+    os.makedirs(os.path.dirname(ref), exist_ok=True)
+    with io.open(ref, "w", encoding="utf-8", newline="\n") as f:
         f.write(content)
     print("wrote %-16s %6d bytes  %4d lines" %
           (path, len(content.encode("utf-8")), content.count("\n")))
