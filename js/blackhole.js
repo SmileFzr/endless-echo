@@ -97,7 +97,9 @@ const NPCS = [
 const T = {
   x: 0, y: 0, r: 15,
   near: null,          // 当前可交互的 NPC
-  exit: { x: 0, y: 268, r: 34 },
+  // 南门: 必须放在玩家能够到的范围里。围墙把玩家夹在 y <= 212-15 = 197,
+  // 交互判定为 exit.r + r*0.8 = 46px, 所以出口中心距墙不能超过约 40px。
+  exit: { x: 0, y: 232, r: 34 },
   anim: 0,
 };
 
@@ -180,6 +182,8 @@ function updateBlackHole(dt) {
 function enterTown() {
   T.x = 0; T.y = 190;          // 从南门进入
   T.near = null;
+  // 防御: 正常流程里 updateBlackHole 已初始化 G.bh, 但直接调用也不该崩
+  if (!G.bh) G.bh = { timer: null, portal: null, townReturn: false, announced: false };
   G.bh.townReturn = true;
   G.bh.portal = null;          // 离开主地图期间黑洞不再存在
   G.bh.timer = rnd(BH_RESPAWN_MIN, BH_RESPAWN_MAX);
