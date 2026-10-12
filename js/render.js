@@ -183,11 +183,15 @@ function drawEliteIndicator() {
     ctx.save();
     ctx.globalAlpha = 0.35 + pulse * 0.35;
     ctx.strokeStyle = '#ff4d5e'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(sx, sy, 46 + pulse * 8, 0, TAU); ctx.stroke();
+    // 圈要跟着体型走, 永远画在血量圆环(半径 r+14)之外
+    const markR = elite.r + 20 + pulse * 7;
+    ctx.beginPath(); ctx.arc(sx, sy, markR, 0, TAU); ctx.stroke();
     ctx.globalAlpha = 0.85;
     ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ff4d5e'; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;
-    ctx.strokeText('精英', sx, sy - 62); ctx.fillText('精英', sx, sy - 62);
+    // 名字放到圆环下方, 避开圆环上方的血量数字
+    const labelY = sy + elite.r + 34;
+    ctx.strokeText('精英', sx, labelY); ctx.fillText('精英', sx, labelY);
     ctx.restore();
     return;
   }

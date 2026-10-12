@@ -1,11 +1,11 @@
 # 无尽回响 · Endless Echo
 
 [![在线试玩](https://img.shields.io/badge/▶_在线试玩-点这里开始-7c3aed?style=for-the-badge)](https://smilefzr.github.io/endless-echo/)
-[![版本](https://img.shields.io/badge/版本-v1.7.0-ffd76a?style=flat-square)](#版本历史)
+[![版本](https://img.shields.io/badge/版本-v1.7.1-ffd76a?style=flat-square)](#版本历史)
 [![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-已部署-22c55e?style=flat-square)](https://smilefzr.github.io/endless-echo/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-**🎮 直接开始玩：<https://smilefzr.github.io/endless-echo/>**　（当前版本 **v1.7.0**）
+**🎮 直接开始玩：<https://smilefzr.github.io/endless-echo/>**　（当前版本 **v1.7.1**）
 
 一个纯前端（零依赖、零构建）的 Roguelike 生存小游戏。手机、平板、桌面浏览器都能直接玩。
 
@@ -191,6 +191,7 @@ python tools/verify.py         # 校验：产物与期望一致、源码一行�
 node tools/smoke-test.js       # 运行时冒烟测试
 node tools/test-blackhole.js   # 黑洞/小镇/特殊能力/图鉴回归测试
 node tools/test-elites.js      # 精英怪类型 / 专属机制 / 图鉴分类
+node tools/test-elite-ui.js    # 精英身上的 UI 元素不重叠
 node tools/test-debug-cmds.js  # 调试指令是否都可用
 node tools/test-e2e.js         # 端到端：主循环 + 真实事件驱动整条链路
 node tools/test-visibility.js  # 切后台暂停回归测试
@@ -282,7 +283,8 @@ G.bh.timer = 1;   // 1 秒后刷出黑洞
 | v1.3.x | 加入**多种怪物类型**（快速 / 虫群 / 远程 / 坦克 / 自爆） |
 | v1.5.3 | 加入**黑洞随机事件 + 回声小镇**（NPC 任务与带冷却的特殊能力） |
 | v1.6.0 | 补齐**十二生肖宠物**、新增**图鉴**、精英血条改为**圆环** |
-| **v1.7.0** | **当前版本**：新增 **8 种精英怪**、图鉴改为**普通/精英**两类 |
+| v1.7.0 | 新增 **8 种精英怪**、图鉴改为**普通/精英**两类 |
+| **v1.7.1** | **当前版本**：修精英标记与血量文字**重叠**、标记圈跟随体型 |
 
 > 版本号沿用原作者在手机上迭代时的命名。仓库的每次发布都在
 > [Tags](https://github.com/SmileFzr/endless-echo/tags) 里可以看到。

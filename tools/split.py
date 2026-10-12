@@ -259,7 +259,7 @@ PATCHES = {
          '        <div class="hudbtns">'),
         # 主菜单显示版本号(以后改版本只需改这里)
         ('<button class="btn tiny" id="btnResetFromMenu">',
-         '<div class="ver" id="verTxt">v1.7.0</div>\n'
+         '<div class="ver" id="verTxt">v1.7.1</div>\n'
          '      <button class="btn tiny" id="btnResetFromMenu">'),
         # 主菜单加"查看图鉴"按钮
         ('<button class="btn" id="btnHelp">玩 法 说 明</button>',
@@ -566,6 +566,18 @@ PATCHES = {
          "      ctx.fillStyle = '#fff';\n"
          "      ctx.fillText(hpText, e.x, e.y - ringR - 13);\n"
          "    }"),
+        # 14) 精英标记与血量文字重叠(这段在原始源码里)
+        #     脉冲圈半径 46~54 压在血量圆环(半径 r+14=50)上; "精英" 文字在 sy-62,
+        #     血量文字在 e.y-ringR-13 也约等于 sy-63, 两行字完全叠在一起。
+        #     改法: 圈放大到 62~69, 血量留在圆环上方, 精英名字移到圆环下方。
+        ("    ctx.beginPath(); ctx.arc(sx, sy, 46 + pulse * 8, 0, TAU); ctx.stroke();",
+         "    // 圈要跟着体型走, 永远画在血量圆环(半径 r+14)之外\n"
+         "    const markR = elite.r + 20 + pulse * 7;\n"
+         "    ctx.beginPath(); ctx.arc(sx, sy, markR, 0, TAU); ctx.stroke();"),
+        ("    ctx.strokeText('精英', sx, sy - 62); ctx.fillText('精英', sx, sy - 62);",
+         "    // 名字放到圆环下方, 避开圆环上方的血量数字\n"
+         "    const labelY = sy + elite.r + 34;\n"
+         "    ctx.strokeText('精英', sx, labelY); ctx.fillText('精英', sx, labelY);"),
     ],
     # 5) 虎宠残留字段 pounceT: 定义了但从未被读取
     "js/ui.js": [
