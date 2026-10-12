@@ -131,6 +131,24 @@ try { g.drawTown(); ok(true, '城镇画面可以正常绘制(无异常)'); }
 catch (e) { ok(false, '城镇绘制抛异常: ' + e.message); }
 
 console.log('');
+console.log('=== 3b. 城镇自适应缩放(宽屏放大 / 手机不缩小) ===');
+try {
+  const zm = vm.runInContext('townZoom()', ctx);
+  ok(zm >= 1 && zm <= 1.55, '当前视口缩放 = ' + zm.toFixed(2) + ' (限制在 1 ~ 1.55)');
+  ok(zm === 1, '窄屏(420x820)保持设计尺寸不缩小');
+  vm.runInContext('W = 1912; H = 941;', ctx);          // 模拟宽屏
+  const zw = vm.runInContext('townZoom()', ctx);
+  ok(zw > 1, '宽屏(1912x941)放大到 ' + zw.toFixed(2) + ' 倍');
+  ok(zw <= 1.55, '放大倍数有上限, 不会过度拉伸');
+  // 缩放不影响世界坐标下的交互判定
+  const anyNpc = g.NPCS.find(n => n.id === 'smith');
+  g.T.x = anyNpc.x; g.T.y = anyNpc.y + 40;
+  vm.runInContext('updateTown(0.016)', ctx);
+  ok(g.T.near === anyNpc, '缩放后 NPC 交互判定仍正常(用世界坐标, 不受缩放影响)');
+  vm.runInContext('W = 420; H = 820;', ctx);           // 还原
+} catch (e) { ok(false, '缩放验证异常: ' + e.message); }
+
+console.log('');
 console.log('=== 4. 小镇内移动与边界 ===');
 const x0 = g.T.x, y0 = g.T.y;
 // 模拟虚拟摇杆向右

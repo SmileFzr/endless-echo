@@ -522,12 +522,21 @@ const townBuildings = [
   { x: 0, y: -195, w: 84, h: 60, roof: '#8a3a4a', wall: '#d9b0b8', label: '镇' },
 ];
 
+/* 城镇画面缩放: 小镇世界只有 464x424, 在宽屏上会显得很小。
+   宽屏最多放大 1.55 倍; 窄屏(手机)保持 1.0, 维持原本设计尺寸不缩小。
+   只影响画面, 碰撞与交互仍用世界坐标。 */
+function townZoom() {
+  return clamp(Math.min(W / 720, H / 660), 1, 1.55);
+}
+
 function drawTown() {
-  const W2 = W / 2, H2 = H / 2;
-  ctx.fillStyle = '#1b2430';
+  const zoom = townZoom();
+  // 缩放后小镇之外的空白太大, 先把整屏铺上地面色, 看起来像镇外的草地
+  ctx.fillStyle = '#233527';
   ctx.fillRect(0, 0, W, H);
   ctx.save();
-  ctx.translate(W2, H2);
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(zoom, zoom);
   ctx.translate(-T.x, -T.y);
 
   // 地面
@@ -611,16 +620,17 @@ function drawTown() {
 
   ctx.restore();
 
-  // 标题条
+  // 标题条(画在屏幕坐标里, 不随城镇缩放变化)
+  const cx = W / 2;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = 'bold 15px system-ui';
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.fillRect(W2 - 118, 14, 236, 30);
+  ctx.fillRect(cx - 118, 14, 236, 30);
   ctx.fillStyle = '#ffe9b0';
-  ctx.fillText('🌆 回声小镇 · 绝对安全', W2, 29);
+  ctx.fillText('🌆 回声小镇 · 绝对安全', cx, 29);
   ctx.font = '11px system-ui';
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillText('拖动屏幕移动　靠近 NPC 按 F 交谈　南门离开', W2, 54);
+  ctx.fillText('拖动屏幕移动　靠近 NPC 按 F 交谈　南门离开', cx, 54);
 }
 
 /* ---------------- 主地图上的黑洞绘制与指示 ---------------- */
