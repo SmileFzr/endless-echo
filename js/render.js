@@ -31,6 +31,7 @@ function render() {
   drawPortalArrows();
   drawEliteIndicator();
   if (typeof drawBlackHoleIndicator === 'function') drawBlackHoleIndicator();
+  if (typeof drawBhBanner === 'function') drawBhBanner();   // 黑洞出现的醒目提示
 }
 function drawGrid() {
   const gs = 110;

@@ -449,7 +449,7 @@ function gainExp(amount) {
     G.pendingLvUps++; sfx('levelup');
     if (P.level >= G.nextEliteLv && !G.eliteAlive) { G.nextEliteLv += 10; spawnElite(); }
   }
-  if (G.pendingLvUps > 0 && G.state === 'playing') showLevelUp();
+  if (G.pendingLvUps > 0 && G.state === 'playing' && !(G.bh && G.bh.banner)) showLevelUp();
   updateHUD();
 }
 function updateEffects(dt) {

@@ -20,16 +20,18 @@ const order = [...html.matchAll(/<script src="js\/([^"]+)"><\/script>/g)].map(m 
 /* ---------------- DOM 桩(像浏览器一样: 写空 innerHTML 会清掉子节点) ---------------- */
 const elements = new Map();
 const drawStats = { fill: 0, stroke: 0, sprite: 0, text: 0 };
+const drawnTexts = [];   // 记录画布上画过的文字, 用于验证提示/指引真的出现了
 function makeCtx2d() {
   const grad = { addColorStop() {} };
   const noop = () => {};
   const t = {
     fillRect: noop, strokeRect: noop, clearRect: noop, beginPath: noop, closePath: noop,
     moveTo: noop, lineTo: noop, arc: noop, ellipse: noop, rect: noop,
+    quadraticCurveTo: noop, bezierCurveTo: noop, arcTo: noop, roundRect: noop, clip: noop,
     fill: () => drawStats.fill++, stroke: () => drawStats.stroke++,
     save: noop, restore: noop, translate: noop, rotate: noop, scale: noop,
     setTransform: noop, setLineDash: noop, drawImage: () => drawStats.sprite++,
-    fillText: () => drawStats.text++, strokeText: noop,
+    fillText: (s) => { drawStats.text++; drawnTexts.push(String(s)); }, strokeText: noop,
     createRadialGradient: () => grad, createLinearGradient: () => grad,
     measureText: () => ({ width: 10 }),
   };
@@ -171,8 +173,25 @@ g.P.skills.push({ id: 'sword', lv: 3, mut: null, cd: 0 }, { id: 'bomb', lv: 3, m
 run(100);
 ok(g.G.bh && g.G.bh.announced, '满足条件后黑洞事件启动, 倒计时 ' + Math.round(g.G.bh.timer) + 's');
 g.G.bh.timer = 0.05;
+drawnTexts.length = 0;
 run(200);
 ok(!!g.G.bh.portal, '主循环自动刷出黑洞');
+// 黑洞出现时必须有醒目提示(视野外也能知道)
+ok(!!g.G.bh.banner, '黑洞出现时弹出了醒目提示横幅');
+const bhTitle = g.G.bh.banner && g.G.bh.banner.title;
+ok(drawnTexts.some(s => s.indexOf(bhTitle) >= 0 || s.indexOf('异响') >= 0 || s.indexOf('空气') >= 0 ||
+   s.indexOf('嗡鸣') >= 0 || s.indexOf('撕开') >= 0),
+   '提示横幅的文字被画到屏幕上: ' + JSON.stringify(bhTitle));
+// 提示会自动消失
+run(4600);
+ok(!g.G.bh.banner, '提示横幅 4.2 秒后自动消失');
+// 黑洞在屏幕外时, 边缘指引与距离要画出来
+ok(Math.hypot(g.G.bh.portal.x - g.P.x, g.G.bh.portal.y - g.P.y) > 420,
+   '黑洞生成在视野外(距离 ' + Math.round(Math.hypot(g.G.bh.portal.x - g.P.x, g.G.bh.portal.y - g.P.y)) + 'px)');
+drawnTexts.length = 0;
+run(50);
+ok(drawnTexts.some(s => s.indexOf('黑洞') >= 0), '屏幕边缘画出了"黑洞"指引');
+ok(drawnTexts.some(s => /m$/.test(s)), '指引带距离读数');
 
 /* ---------- 3. 走进黑洞 ---------- */
 teleportField(g.G.bh.portal.x, g.G.bh.portal.y);

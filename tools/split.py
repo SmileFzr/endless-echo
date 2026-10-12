@@ -276,6 +276,10 @@ PATCHES = {
          "if (e.key === 'f' || e.key === 'F') townInteract();   // 城镇里与 NPC 交谈 / 离开\n"
          "  if (e.key === 'Escape') { if (G.state === 'playing') pauseGame();",
          "inline"),
+        # 4h) 黑洞提示横幅显示期间先不弹升级三选一, 免得两件事糊在一起;
+        #     横幅结束后由 bhUpdateBanner() 补弹
+        ("  if (G.pendingLvUps > 0 && G.state === 'playing') showLevelUp();",
+         "  if (G.pendingLvUps > 0 && G.state === 'playing' && !(G.bh && G.bh.banner)) showLevelUp();"),
     ],
     # 7) 绘制: 城镇画面分支与黑洞绘制(render() 定义在 render.js)
     "js/render.js": [
@@ -288,7 +292,8 @@ PATCHES = {
         "  drawOrbs(); drawEffects(false);"),
         ("  drawPortalArrows();\n  drawEliteIndicator();",
         "  drawPortalArrows();\n  drawEliteIndicator();\n"
-        "  if (typeof drawBlackHoleIndicator === 'function') drawBlackHoleIndicator();"),
+        "  if (typeof drawBlackHoleIndicator === 'function') drawBlackHoleIndicator();\n"
+        "  if (typeof drawBhBanner === 'function') drawBhBanner();   // 黑洞出现的醒目提示"),
     ],
     # 5) 虎宠残留字段 pounceT: 定义了但从未被读取
     "js/ui.js": [

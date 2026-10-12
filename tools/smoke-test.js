@@ -23,6 +23,7 @@ function makeCtx2d() {
   const target = {
     fillRect: noop, strokeRect: noop, clearRect: noop,
     beginPath: noop, closePath: noop, moveTo: noop, lineTo: noop, arc: noop,
+    quadraticCurveTo: noop, bezierCurveTo: noop, arcTo: noop, roundRect: noop, clip: noop,
     ellipse: noop, rect: noop, fill: () => { ctxCalls.fill++; },
     stroke: () => { ctxCalls.stroke++; }, save: noop, restore: noop,
     translate: noop, rotate: noop, scale: noop, setTransform: noop,

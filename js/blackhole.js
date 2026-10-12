@@ -23,6 +23,15 @@ const BH_RESPAWN_MIN = 180;       // 下一次黑洞最早 3 分钟
 const BH_RESPAWN_MAX = 300;       // 最晚 5 分钟
 const BH_PORTAL_LIFE = 150;       // 黑洞存在 150 秒后自行消失
 const BH_ENTER_RADIUS = 46;       // 走进这个距离就被吸入
+const BH_BANNER_LIFE = 4.2;       // 出现时的醒目提示持续秒数
+
+/* 黑洞出现时的提示语(随机取一条, 避免每次都一样) */
+const BH_ALERTS = [
+  ['附近有异响，好像有什么东西', '跟着屏幕边缘的紫色箭头走'],
+  ['空气突然变重了…', '地图上出现了一个黑洞，倒计时内有效'],
+  ['远处传来低沉的嗡鸣', '朝紫色箭头方向前进'],
+  ['空间被撕开了一道口子', '走进黑洞可以去往回声小镇'],
+];
 
 /* ---------------- 特殊能力 ---------------- */
 const SPECIALS = {
@@ -142,6 +151,7 @@ function bhEligible() {
 }
 
 function updateBlackHole(dt) {
+  bhUpdateBanner(dt);
   if (G.mode !== 'endless' && G.mode !== 'challenge') return;
   ensureSaveSlots();
   if (!G.bh) G.bh = { timer: null, portal: null, townReturn: false, announced: false };
@@ -154,7 +164,7 @@ function updateBlackHole(dt) {
   }
   if (!G.bh.announced) return;
 
-  // 黑洞里不要重复生成
+  // 黑洞已存在: 倒计时 + 检测吸入
   if (G.bh.portal) {
     const po = G.bh.portal;
     po.life -= dt;
@@ -173,9 +183,77 @@ function updateBlackHole(dt) {
   const dist = rnd(420, 780);
   G.bh.portal = { x: P.x + Math.cos(a) * dist, y: P.y + Math.sin(a) * dist, life: BH_PORTAL_LIFE, spin: 0 };
   G.bh.townReturn = false;
-  toast('🕳 黑洞出现了！走进去看看');
+  bhShowBanner();                                   // 醒目提示(在视野外时也能知道)
   sfx('elite');
   G.shake = Math.max(G.shake, 8);
+}
+
+/* ---------------- 黑洞出现的醒目提示 ---------------- */
+function bhShowBanner() {
+  const pickAlert = BH_ALERTS[(Math.random() * BH_ALERTS.length) | 0];
+  G.bh.banner = {
+    title: pickAlert[0],
+    sub: pickAlert[1],
+    life: BH_BANNER_LIFE,
+  };
+  sfx('elite');
+}
+
+/* 每帧推进提示的计时(即使暂停在升级界面也要能走完) */
+function bhUpdateBanner(dt) {
+  const b = G.bh && G.bh.banner;
+  if (!b) return;
+  b.life -= dt;
+  if (b.life > 0) return;
+  G.bh.banner = null;
+  // 提示期间如果升级了, 等提示结束再弹三选一, 免得糊在一起
+  if (G.pendingLvUps > 0 && G.state === 'playing') showLevelUp();
+}
+
+function drawBhBanner() {
+  const b = G.bh && G.bh.banner;
+  if (!b) return;
+  const total = BH_BANNER_LIFE;
+  const fadeIn = 0.3, fadeOut = 0.8;
+  let a = 1;
+  if (b.life > total - fadeIn) a = (total - b.life) / fadeIn;      // 淡入
+  else if (b.life < fadeOut) a = b.life / fadeOut;                 // 淡出
+  a = clamp(a, 0, 1) * 0.97;
+
+  const cx = W / 2;
+  const cy = Math.max(136, H * 0.22);
+  const bw = Math.min(W - 40, 460), bh2 = 76;
+  const x0 = cx - bw / 2, y0 = cy - bh2 / 2;
+
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  // 底板
+  ctx.fillStyle = 'rgba(10,8,22,0.93)';
+  ctx.strokeStyle = 'rgba(190,130,255,0.9)';
+  ctx.lineWidth = 2;
+  const r = 14;
+  ctx.beginPath();
+  ctx.moveTo(x0 + r, y0);
+  ctx.lineTo(x0 + bw - r, y0); ctx.quadraticCurveTo(x0 + bw, y0, x0 + bw, y0 + r);
+  ctx.lineTo(x0 + bw, y0 + bh2 - r); ctx.quadraticCurveTo(x0 + bw, y0 + bh2, x0 + bw - r, y0 + bh2);
+  ctx.lineTo(x0 + r, y0 + bh2); ctx.quadraticCurveTo(x0, y0 + bh2, x0, y0 + bh2 - r);
+  ctx.lineTo(x0, y0 + r); ctx.quadraticCurveTo(x0, y0, x0 + r, y0);
+  ctx.closePath();
+  ctx.shadowColor = 'rgba(190,130,255,0.85)'; ctx.shadowBlur = 22;
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // 标题
+  ctx.font = 'bold 17px system-ui';
+  ctx.fillStyle = '#e8d4ff';
+  ctx.fillText('🕳  ' + b.title, cx, cy - 14);
+  // 副标题
+  ctx.font = '12.5px system-ui';
+  ctx.fillStyle = 'rgba(220,200,255,0.78)';
+  ctx.fillText(b.sub + '　·　' + Math.ceil(b.life) + ' 秒后消散', cx, cy + 14);
+  ctx.restore();
 }
 
 /* ---------------- 进出城镇 ---------------- */
@@ -618,13 +696,16 @@ function drawBlackHoleIndicator() {
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // 箭头(比精英怪那支更大)
+  // 箭头: 大号 + 白色描边 + 轻微脉冲, 在纯黑背景上很扎眼
   ctx.save();
   ctx.globalAlpha = 0.7 + pulse * 0.3;
   ctx.translate(ax, ay); ctx.rotate(a);
+  const beat = 1 + pulse * 0.18;          // 呼吸式缩放
+  ctx.scale(beat, beat);
   ctx.shadowColor = '#c79bff'; ctx.shadowBlur = 18;
   ctx.fillStyle = '#c79bff';
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';   // 白色描边, 更容易看清
+  ctx.lineWidth = 2.5;
   ctx.beginPath(); ctx.moveTo(24, 0); ctx.lineTo(-12, -15); ctx.lineTo(-12, 15); ctx.closePath();
   ctx.fill(); ctx.stroke();
   ctx.restore();
@@ -661,10 +742,8 @@ function debugSpawnBlackHole() {
   G.bh.announced = true;   // 跳过"3 个技能且 1 个到 3 级"的条件
   G.bh.portal = null;      // 清掉旧的, 让主循环立刻重新生成
   G.bh.timer = 0;
-  toast('🕳 黑洞已召唤 · 朝紫色箭头走过去');
   return '下一帧会在你附近生成黑洞';
 }
-
 /* 直接传送到黑洞旁边(等它生成后一步进城) */
 function debugGotoBlackHole() {
   if (!P) { console.warn('先点「无尽模式」开始游戏, 再执行这条命令'); return null; }
