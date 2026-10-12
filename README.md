@@ -1,5 +1,11 @@
 # 无尽回响 · Endless Echo
 
+[![在线试玩](https://img.shields.io/badge/▶_在线试玩-点这里开始-7c3aed?style=for-the-badge)](https://smilefzr.github.io/endless-echo/)
+[![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-已部署-22c55e?style=flat-square)](https://smilefzr.github.io/endless-echo/)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
+
+**🎮 直接开始玩：<https://smilefzr.github.io/endless-echo/>**
+
 一个纯前端（零依赖、零构建）的 Roguelike 生存小游戏。手机、平板、桌面浏览器都能直接玩。
 
 拖动屏幕控制角色移动，攻击全自动；击杀怪物掉落经验球，升级后三选一强化；
@@ -7,9 +13,12 @@
 
 ## 在线试玩
 
-**https://smilefzr.github.io/endless-echo/**
+### 👉 <https://smilefzr.github.io/endless-echo/>
 
 手机浏览器打开后可"添加到主屏幕"，全屏当 App 玩。无需登录、无需安装。
+
+> 进度保存在**各自设备**的浏览器里（`localStorage`），**不会跨设备同步**：
+> 手机上的存档不会出现在电脑上，反之亦然。清除浏览器数据会丢失进度。
 
 ## 本地运行
 
