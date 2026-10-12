@@ -43,11 +43,12 @@ python -m http.server 8000
 │   ├── utils.js        # 常量与工具函数（TAU / rnd / clamp / fmtTime ...）
 │   ├── audio.js        # Web Audio 音频引擎：循环 BGM + 音效合成
 │   ├── game.js         # 游戏状态、数值成长、战斗与推进逻辑
-│   ├── pets.js         # 宠物表（生肖伙伴）
+│   ├── pets-extra.js   # 生肖宠物扩展表（兔/蛇/马/羊/猴/鸡/猪/牛）
+│   ├── pets.js         # 宠物表（鼠/虎/龙/狗，并合并上面的扩展表）
 │   ├── skills.js       # 技能表与属性表
 │   ├── render.js       # 全部 Canvas 绘制
 │   ├── ui.js           # DOM 界面交互与主循环
-│   └── blackhole.js    # 黑洞随机事件 + 回声小镇 + 特殊能力（手写模块）
+│   └── blackhole.js    # 黑洞随机事件 + 回声小镇 + 特殊能力 + 图鉴（手写模块）
 ├── versions/
 │   ├── README.md       # 单文件版本归档说明
 │   └── game3.2.html    # v1.5.3 的原始单文件（拆分来源）
@@ -61,8 +62,10 @@ python -m http.server 8000
     └── test-blackhole.js  # 黑洞 / 小镇 / 特殊能力的回归测试
 ```
 
-> `js/` 里的 8 个文件都是**经典 script**，按 `index.html` 中的顺序加载、共享同一个全局作用域，
-> 顺序不能随意调换（数组里是依赖顺序：工具函数 → 音频 → 核心逻辑 → 数据表 → 绘制 → 界面 → 黑洞玩法）。
+> `js/` 里的 10 个文件都是**经典 script**，按 `index.html` 中的顺序加载、共享同一个全局作用域，
+> 顺序不能随意调换（依赖顺序：工具函数 → 音频 → 核心逻辑 → 宠物扩展表 → 宠物表 → 数据表
+> → 绘制 → 界面 → 黑洞玩法）。
+> 注意 `pets-extra.js` 必须排在 `pets.js` **之前**（后者求值时要读取 `PETS_EXTRA`）。
 
 ## 玩法说明
 
