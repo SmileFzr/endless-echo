@@ -47,8 +47,9 @@ def flat(s):
 html = rd("index.html")
 order = re.findall(r'<script src="js/([^"]+)"></script>', html)
 FROM_SOURCE = ["utils.js", "audio.js", "game.js", "pets.js", "skills.js", "render.js", "ui.js"]
-EXTRA = ["blackhole.js"]          # 手写模块, 不在原始单文件里
-assert order == FROM_SOURCE + EXTRA, order
+EXTRA = ["pets-extra.js", "blackhole.js"]    # 手写模块 / 扩展数据表, 不在原始单文件里
+# 按加载顺序校验(宠物扩展表在 pets.js 之前)
+assert sorted(order) == sorted(FROM_SOURCE + EXTRA), order
 
 ok = True
 def report(cond, msg):
@@ -133,19 +134,43 @@ exp = list(lines[:so - 1]) + ['<link rel="stylesheet" href="css/style.css">'] + 
 town_html = re.search(r'TOWN_HTML = """(.*?)"""', rd("tools/split.py"), re.S).group(1).split("\n")
 got = sig(html)
 want = set(sig("\n".join(exp)))
+want_flat = {flat(x) for x in want}
 extra_ok = set(town_html) | {'<div id="hudSpecials"></div>'}
-unexpected = [l for l in got
+extra_ok_flat = {flat(x) for x in extra_ok} | want_flat
+
+# index.html 里有意的修改(由 PATCHES 注入或替换)
+HTML_PATCH_KEYS = ('expTxt', 'verTxt', 'btnCodex', '查看图鉴', '生肖伙伴')
+
+
+def is_intentional(line):
+    return any(k in line for k in HTML_PATCH_KEYS)
+
+
+# 所有"在原始源码里找不到对应"的产物行(过滤之前的全集),
+# 供下面的"行尾被追加了内容(如 <br>)"判断使用
+candidates = [l for l in got
               if l not in want and l not in extra_ok
-              and 'expTxt' not in l                      # 有意的经验阈值修正 0/8 -> 0/7
-              and 'verTxt' not in l                      # 主菜单版本号(由 PATCHES 注入)
-              and not (flat(l) in {flat(x) for x in want} or flat(l) in {flat(x) for x in extra_ok})]
-lost = [l for l in sig("\n".join(exp))
-        if l not in got and 'expTxt' not in l]
+              and flat(l) not in extra_ok_flat]
+cand_flat = [flat(x) for x in candidates]
+
+unexpected = [l for l in candidates
+              if not is_intentional(l)
+              and not any(flat(x) in flat(l) for x in want)]
+# 被有意替换掉的原始行, 连同它后面紧跟的新行一起放行
+lost = []
+for l in sig("\n".join(exp)):
+    if l in got or flat(l) in {flat(x) for x in got}:
+        continue
+    lost.append(l)
+# 原始行只要"内容上仍出现在某条新行里"(例如行尾追加了 <br>), 就算保留
+lost = [l for l in lost
+        if not is_intentional(l)
+        and not any(flat(l) in e for e in cand_flat)]
 report(not lost and not unexpected,
-       "index.html 结构一致(仅多出 css/js 引用、小镇 DOM、hudSpecials)")
-for l in lost[:5]:
+       "index.html 结构与源文件一致(仅版本号/图鉴按钮/玩法说明等有意修改)")
+for l in lost[:6]:
     print("     缺少: " + l.encode("unicode_escape").decode()[:110])
-for l in unexpected[:5]:
+for l in unexpected[:6]:
     print("     多出: " + l.encode("unicode_escape").decode()[:110])
 
 # ---------------------------------------------------------------

@@ -89,6 +89,8 @@ UI_MARKER = "const el = id => document.getElementById(id);"
 
 # 黑洞小镇模块: 作为第 8 个 js 文件附加在最后(源码是 js/blackhole.js, 不是从单文件拆出来的)
 BLACKHOLE = "js/blackhole.js"
+# 生肖宠物扩展表: 紧跟 js/pets.js 之后加载(源码 js/pets-extra.js)
+PETS_EXTRA = "js/pets-extra.js"
 # 黑洞模块需要的 DOM 片段(插入到 <div id="toast"></div> 之后)
 TOWN_HTML = """<div id="townBar" class="hidden">
     <div class="town-head">
@@ -105,6 +107,16 @@ TOWN_HTML = """<div id="townBar" class="hidden">
       <div class="sub">TALK</div>
       <div class="dlg" id="dlgBody"></div>
       <div id="dlgActions"></div>
+    </div>
+  </div>
+  <div class="veil hidden" id="codex">
+    <div class="card codexcard">
+      <div class="title" style="font-size:20px">图 鉴</div>
+      <div class="sub">CODEX</div>
+      <div class="codexprog" id="codexProg"></div>
+      <div class="codexscroll" id="codexBody"></div>
+      <div class="codexdetail" id="codexDetail"></div>
+      <button class="btn primary" id="btnCodexBack" style="margin-top:14px">返 回</button>
     </div>
   </div>"""
 
@@ -153,6 +165,33 @@ TOWN_CSS = """
   /* 主菜单底部的版本号 */
   .ver{font-size:10.5px;opacity:.28;letter-spacing:1px;margin-top:10px;
     font-family:ui-monospace,Menlo,Consolas,monospace}
+  /* ---------- 图鉴 ---------- */
+  .codexcard{max-width:560px}
+  .codexprog{font-size:11.5px;opacity:.62;margin:2px 0 10px;text-align:center;line-height:1.9}
+  .codexscroll{text-align:left;max-height:58vh;overflow-y:auto;padding-right:4px;
+    -webkit-overflow-scrolling:touch}
+  .codexsec{font-size:12.5px;font-weight:800;color:#ffd76a;letter-spacing:1px;
+    margin:10px 0 8px;padding-left:6px;border-left:3px solid #ffd76a}
+  .codexsec:first-child{margin-top:2px}
+  .codexsec span{font-weight:400;opacity:.5;font-size:11px;margin-left:6px;color:#e8e8f0}
+  .codexgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+  .codexitem{padding:8px 6px;border-radius:11px;background:rgba(255,255,255,.045);
+    border:1px solid rgba(255,255,255,.1);text-align:center;transition:.15s;cursor:pointer}
+  .codexitem:hover{background:rgba(255,255,255,.1)}
+  .codexitem .ce{font-size:26px;line-height:1.25}
+  .codexitem .cn{font-size:11.5px;font-weight:700;margin-top:2px}
+  .codexitem .cs{font-size:10px;opacity:.6;margin-top:2px;line-height:1.4;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .codexitem.enemy{border-color:rgba(255,120,120,.28)}
+  .codexitem.elite{border-color:rgba(255,90,90,.6);background:rgba(255,80,80,.07)}
+  .codexitem.locked{opacity:.34;filter:grayscale(1);cursor:default}
+  .codexitem.locked .cn{color:#8a8a9a}
+  .codexdetail{margin-top:10px;padding:11px 12px;border-radius:11px;
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+    font-size:12px;line-height:1.75;min-height:58px}
+  .codexdetail .cdname{font-size:13.5px;font-weight:800;color:#ffd76a;margin-bottom:3px}
+  .codexdetail .cdrow{opacity:.8}
+  .codexdetail .cdskill{color:#8ab4ff;font-weight:700}
   /* 窄屏(手机竖屏)下让特殊能力条独占一行, 避免和技能栏挤在一起 */
   @media (max-width:430px){
     #hudSpecials{flex:1 0 100%;justify-content:flex-start;margin-top:4px}
@@ -216,8 +255,19 @@ PATCHES = {
          '        <div class="hudbtns">'),
         # 主菜单显示版本号(以后改版本只需改这里)
         ('<button class="btn tiny" id="btnResetFromMenu">',
-         '<div class="ver" id="verTxt">v1.5.3</div>\n'
+         '<div class="ver" id="verTxt">v1.6.0</div>\n'
          '      <button class="btn tiny" id="btnResetFromMenu">'),
+        # 主菜单加"查看图鉴"按钮
+        ('<button class="btn" id="btnHelp">玩 法 说 明</button>',
+         '<button class="btn" id="btnCodex">📖 查 看 图 鉴</button>\n'
+         '      <button class="btn" id="btnHelp">玩 法 说 明</button>'),
+        # 玩法说明里补一句图鉴
+        ('▸ 按 <b>⏸暂停按钮</b> 或 ESC 可暂停/继续',
+         '▸ 按 <b>⏸暂停按钮</b> 或 ESC 可暂停/继续<br>\n'
+         '        ▸ 主菜单 <b>📖 查看图鉴</b> 记录遇到过的怪物与宠物'),
+        # 宠物蛋文案: 12 只已经补齐
+        ('<div class="sub">收集 12 生肖伙伴</div>',
+         '<div class="sub">收集 12 生肖伙伴（已补齐）</div>'),
     ],
     # 2) BGM 调度器用 setInterval 创建后从无清理入口: 静音/切后台后仍每 40ms
     #    创建振荡器节点空转; 切后台时浏览器还会限流导致恢复后音频卡顿
@@ -249,7 +299,53 @@ PATCHES = {
          "  // 注意: 永久强化 SAVE.up.hp / .spd 已在 createPlayer() 里计入 baseHp / baseSpeed,\n"
          "  //       这里不能重复加, 否则每点永久生命实际 +32 而不是 +22。\n"
          "  dmg += SAVE.up.dmg * 0.05; cdr += SAVE.up.cdr * 0.03;"),
-        # 4b) 敌人上限在循环外只判断一次, 极端情况下会突破 320
+        # 4a2) 被动生肖宠物的属性加成(马/鸡/牛)
+        ("  for (const s of P.skills) {\n    if (s.id === 'expgain') expm += s.lv * 0.10;",
+         "  // 被动生肖宠物: 🐴马 提速 / 🐔鸡 提暴击 / 🐮牛 减伤+加血\n"
+         "  if (P.pets) {\n"
+         "    for (const pet of P.pets) {\n"
+         "      if (pet.id === 'horse') spd += Math.min(0.24, pet.lv * 0.02) * (pet.mut ? 2 : 1);\n"
+         "      if (pet.id === 'rooster') crit += Math.min(0.30, pet.lv * 0.02);\n"
+         "      if (pet.id === 'ox') { armor += Math.min(0.30, pet.lv * 0.02) * (pet.mut ? 2 : 1); hpBonus += pet.lv * 8; }\n"
+         "    }\n"
+         "  }\n"
+         "  for (const s of P.skills) {\n    if (s.id === 'expgain') expm += s.lv * 0.10;"),
+        # 4a3) 猪: 金币掉落加成(刻意保守, 避免破坏商店经济)
+        ("  G.runGold += e.explode ? 3 : 1;",
+         "  let goldGain = e.explode ? 3 : 1;\n"
+         "  const pigLv = (P.pets || []).reduce((m, p) => p.id === 'pig' ? Math.max(m, p.lv) : m, 0);\n"
+         "  // 最多 +1 枚, 且随等级提高触发概率(20 级时约 +45%)\n"
+         "  if (pigLv > 0) {\n"
+         "    const chance = Math.min(0.45, 0.10 + pigLv * 0.018);\n"
+         "    const bonus = 1 + (Math.random() < chance ? 1 : 0);\n"
+         "    goldGain = Math.round(goldGain * bonus);\n"
+         "  }\n"
+         "  G.runGold += goldGain;"),
+        # 4a4) 中毒状态(蛇宠物): 增伤 + 每 0.5 秒持续掉血
+        ("  if (e.acid > 0) dmg *= 1.3;\n  if (e.burn > 0) dmg *= (1 + e.burn * 0.05);",
+         "  if (e.acid > 0) dmg *= 1.3;\n"
+         "  if (e.burn > 0) dmg *= (1 + e.burn * 0.05);\n"
+         "  if (e.poison > 0) dmg *= (1 + e.poison * 0.04);   // 中毒状态增伤"),
+        ("    if (e.flash > 0) e.flash -= dt;\n    if (e.acid > 0) e.acid -= dt;\n    if (e.burn > 0) e.burn -= dt * 0.5;",
+         "    if (e.flash > 0) e.flash -= dt;\n"
+         "    if (e.acid > 0) e.acid -= dt;\n"
+         "    if (e.burn > 0) e.burn -= dt * 0.5;\n"
+         "    if (e.poison > 0) {\n"
+         "      // 中毒: 每 0.5 秒结算一次持续伤害, 并逐秒衰减\n"
+         "      e.poison -= dt * 0.5;\n"
+         "      e.poisonTick = (e.poisonTick || 0) - dt;\n"
+         "      if (e.poisonTick <= 0) {\n"
+         "        e.poisonTick = 0.5;\n"
+         "        const pd = Math.max(1, Math.round(e.poison * 3));\n"
+         "        e.hp -= pd; e.flash = 0.06;\n"
+         "        if (texts.length < 30) texts.push({ x: e.x + rnd(-6, 6), y: e.y - e.r - 4, v: -40, life: 0.5, max: 0.5, t: String(pd), crit: false });\n"
+         "        if (e.hp <= 0) { e.poison = 0; killEnemy(e); }\n"
+         "      }\n"
+         "    }"),
+        # 4a5) 记录"见过的怪物"(图鉴用)
+        ("  e.dead = true; G.kills++; sfx('kill');",
+         "  e.dead = true; G.kills++; sfx('kill');\n"
+         "  markSeen('enemy', e.type);   // 图鉴: 见过即记录"),
         ("  if (enemies.length > 320) return;\n  for (let i = 0; i < count; i++) spawnOne();",
          "  for (let i = 0; i < count; i++) { if (enemies.length >= 320) break; spawnOne(); }"),
         # 4c) 精英怪冲锋没有无敌帧, 一次冲锋可能连续撞中两次
@@ -288,6 +384,15 @@ PATCHES = {
         ("  if (G.pendingLvUps > 0 && G.state === 'playing') showLevelUp();",
          "  if (G.pendingLvUps > 0 && G.state === 'playing' && !(G.bh && G.bh.banner)) showLevelUp();"),
     ],
+    # 8) 生肖宠物扩展(兔/蛇/马/羊/猴/鸡/猪/牛): 由 js/pets-extra.js 提供,
+    #    合并进 PETS 表, 让"12 生肖"名实相符
+    "js/pets.js": [
+        ("        }\n      }\n    }\n  },\n};",
+         "        }\n      }\n    }\n  },\n"
+         "  // 其余 8 只生肖由 js/pets-extra.js 提供并在此合并\n"
+         "  ...(typeof PETS_EXTRA !== 'undefined' ? PETS_EXTRA : {}),\n"
+         "};"),
+    ],
     # 7) 绘制: 城镇画面分支与黑洞绘制(render() 定义在 render.js)
     "js/render.js": [
         ("function render() {\n  ctx.fillStyle = '#07070e';\n  ctx.fillRect(0, 0, W, H);\n  if (!P) return;",
@@ -301,6 +406,53 @@ PATCHES = {
         "  drawPortalArrows();\n  drawEliteIndicator();\n"
         "  if (typeof drawBlackHoleIndicator === 'function') drawBlackHoleIndicator();\n"
         "  if (typeof drawBhBanner === 'function') drawBhBanner();   // 黑洞出现的醒目提示"),
+        # 7b) 精英血条由矩形改为圆环(线宽沿用原来的 10)
+        ("    if (e.elite) {\n"
+         "      const w = 120, h = 10;\n"
+         "      const x = e.x - w / 2, y = e.y - e.r - 26;\n"
+         "      ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(x - 2, y - 2, w + 4, h + 4);\n"
+         "      ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(x, y, w, h);\n"
+         "      const hpPct = clamp(e.hp / e.maxHp, 0, 1);\n"
+         "      const grad = ctx.createLinearGradient(x, y, x + w, y);\n"
+         "      grad.addColorStop(0, '#ff4d5e'); grad.addColorStop(1, '#ff8c42');\n"
+         "      ctx.fillStyle = grad;\n"
+         "      ctx.fillRect(x, y, w * hpPct, h);\n"
+         "      ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;\n"
+         "      ctx.strokeRect(x, y, w, h);\n"
+         "      // 血量数字\n"
+         "      ctx.font = 'bold 11px system-ui';\n"
+         "      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';\n"
+         "      ctx.fillStyle = '#fff';\n"
+         "      ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.lineWidth = 3;\n"
+         "      const hpText = Math.ceil(e.hp) + ' / ' + Math.round(e.maxHp);\n"
+         "      ctx.strokeText(hpText, e.x, y - 8);\n"
+         "      ctx.fillText(hpText, e.x, y - 8);\n"
+         "    }",
+         "    // 精英怪血条: 环绕本体的圆环(线宽沿用原来的 10)\n"
+         "    if (e.elite) {\n"
+         "      const ringR = e.r + 14, lw = 10;\n"
+         "      const start = -Math.PI / 2;\n"
+         "      const hpPct = clamp(e.hp / e.maxHp, 0, 1);\n"
+         "      ctx.beginPath(); ctx.arc(e.x, e.y, ringR, 0, TAU);\n"
+         "      ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = lw + 3; ctx.stroke();\n"
+         "      ctx.beginPath(); ctx.arc(e.x, e.y, ringR, 0, TAU);\n"
+         "      ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = lw; ctx.stroke();\n"
+         "      if (hpPct > 0.002) {\n"
+         "        const grad = ctx.createLinearGradient(e.x - ringR, e.y, e.x + ringR, e.y);\n"
+         "        grad.addColorStop(0, '#ff4d5e'); grad.addColorStop(1, '#ff8c42');\n"
+         "        ctx.beginPath();\n"
+         "        ctx.arc(e.x, e.y, ringR, start, start + TAU * hpPct);\n"
+         "        ctx.strokeStyle = grad; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();\n"
+         "        ctx.lineCap = 'butt';\n"
+         "      }\n"
+         "      ctx.font = 'bold 11px system-ui';\n"
+         "      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';\n"
+         "      const hpText = Math.ceil(e.hp) + ' / ' + Math.round(e.maxHp);\n"
+         "      ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.lineWidth = 3;\n"
+         "      ctx.strokeText(hpText, e.x, e.y - ringR - 13);\n"
+         "      ctx.fillStyle = '#fff';\n"
+         "      ctx.fillText(hpText, e.x, e.y - ringR - 13);\n"
+         "    }"),
     ],
     # 5) 虎宠残留字段 pounceT: 定义了但从未被读取
     "js/ui.js": [
@@ -309,6 +461,7 @@ PATCHES = {
         ("function backToMenu() {\n  el('pauseVeil').classList.add('hidden'); el('resetVeil').classList.add('hidden');",
          "function backToMenu() {\n"
          "  if (typeof closeNPCDialog === 'function') closeNPCDialog();\n"
+         "  if (typeof closeCodex === 'function') el('codex').classList.add('hidden');\n"
          "  el('townBar').classList.add('hidden');\n"
          "  el('townPrompt').classList.add('hidden');\n"
          "  el('btnTownAct').classList.add('hidden');\n"
@@ -317,13 +470,16 @@ PATCHES = {
         ("function doResetSave() {",
          "function doResetSave() {\n"
          "  if (typeof closeNPCDialog === 'function') closeNPCDialog();\n"
+         "  el('codex').classList.add('hidden');\n"
          "  el('townBar').classList.add('hidden');\n"
          "  el('townPrompt').classList.add('hidden');\n"
          "  el('btnTownAct').classList.add('hidden');\n"
          "  el('ui').classList.remove('town');"),
-        # 5b) startGame 里初始化特殊能力计时(实现在 blackhole.js)
+        # 5b) startGame 里初始化特殊能力计时 + 记录出战宠物(图鉴)
         ("  const starters = ['homing', 'sword', 'lightning', 'bomb'];",
          "  P.wingT = 0; P.bootsT = 0; P.specials = {};   // 特殊能力计时\n"
+         "  P._monkeyT = 0; P._monkeyCast = 0; P._pigT = 0; P._horseTrail = 0;\n"
+         "  if (typeof backfillSeenPets === 'function') backfillSeenPets();   // 图鉴: 已解锁的宠物记为已遇到\n"
          "  const starters = ['homing', 'sword', 'lightning', 'bomb'];"),
         # 3b) F 键交互, 进入小镇后按 F 和 NPC 说话 / 从南门离开
         # 3c) 重置存档时保留已解锁的特殊能力与任务进度(否则重置会把小镇奖励一起抹掉)
@@ -342,6 +498,8 @@ PATCHES = {
         ("el('btnPause').onclick = (e) => { e.stopPropagation(); pauseGame(); };",
         "el('btnPause').onclick = (e) => { e.stopPropagation(); pauseGame(); };\n"
         "el('btnTownAct').onclick = () => townInteract();\n"
+        "el('btnCodex').onclick = () => openCodex();\n"
+        "el('btnCodexBack').onclick = () => closeCodex();\n"
         "if (typeof updateHudSpecials === 'function') updateHudSpecials();"),
         # --- 以下为合并进来的另一组 ui.js 补丁 ---
         # 3) 切到后台/锁屏时游戏不会暂停: 生存类游戏里玩家回来后往往已经死了。
@@ -432,12 +590,19 @@ for mod in used:
     filename, label = MODULE_HEADER[mod]
     body = "\n".join(tidy(module_lines[mod]))
     manifest.append(("js/%s" % filename, (BANNER % label) + "\n" + body + "\n"))
+    # 宠物扩展表必须排在 pets.js 之前(pets.js 求值时要读取 PETS_EXTRA)
+    if mod == "pets":
+        script_order.append("pets-extra.js")
     script_order.append(filename)
 
 # 黑洞小镇模块: 源码已存在于 js/blackhole.js, 作为最后一个脚本加载。
 # 它不由本脚本生成, 但把它的当前内容也记进"期望内容", 这样 verify.py 能发现手工改动。
 with io.open(os.path.join(ROOT, BLACKHOLE), encoding="utf-8", newline="") as f:
     manifest.append((BLACKHOLE, f.read().replace("\r\n", "\n")))
+
+# 生肖宠物扩展表: 源码在 js/pets-extra.js, 必须紧跟 js/pets.js 之后加载
+with io.open(os.path.join(ROOT, PETS_EXTRA), encoding="utf-8", newline="") as f:
+    manifest.append((PETS_EXTRA, f.read().replace("\r\n", "\n")))
 
 # 黑洞小镇模块: 源码已存在于 js/blackhole.js, 作为最后一个脚本加载
 script_order.append("blackhole.js")

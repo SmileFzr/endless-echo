@@ -18,13 +18,17 @@ for (const f of files) {
   for (const m of src.matchAll(/\bel\(\s*'([^']+)'\s*\)/g)) used.set(m[1], f);
   for (const m of src.matchAll(/getElementById\(\s*'([^']+)'\s*\)/g)) used.set(m[1], f);
 }
+/* 由 JS 动态创建、而非写在 index.html 里的 id */
+const CREATED_BY_JS = new Set(['codexStyle']);
+/* 纯展示元素: 由 HTML 写死, 代码不需要引用(如版本号、静态标题) */
+const DISPLAY_ONLY = new Set(['verTxt']);
 
 console.log('index.html 中定义的 id 共 ' + defined.size + ' 个');
 console.log('代码中引用的 id 共 ' + used.size + ' 个');
 console.log('');
-const missing = [...used].filter(([id]) => !defined.has(id));
+const missing = [...used].filter(([id]) => !defined.has(id) && !CREATED_BY_JS.has(id));
 if (missing.length === 0) {
-  console.log('✔ 所有引用的 id 都存在于 index.html');
+  console.log('✔ 所有引用的 id 都存在于 index.html(或由 JS 动态创建)');
 } else {
   console.log('✘ 以下 id 被代码引用但 index.html 中没有:');
   for (const [id, f] of missing) console.log('   ' + id + '  (来自 ' + f + ')');
@@ -33,8 +37,8 @@ if (missing.length === 0) {
 
 // 反向: index.html 里定义了但从未被引用的 id(可能是死元素)
 const unused = [...defined].filter(id => !used.has(id));
-const ignorable = /^(c|ui|menu|help|pauseVeil|resetVeil|petHome|petSelect|hatchVeil|levelup|shop|over|toast|npcDlg|townBar|townPrompt|btnTownAct)$/;
-const dead = unused.filter(id => !ignorable.test(id));
+const ignorable = /^(c|ui|menu|help|pauseVeil|resetVeil|petHome|petSelect|hatchVeil|levelup|shop|over|toast|npcDlg|townBar|townPrompt|btnTownAct|codex)$/;
+const dead = unused.filter(id => !ignorable.test(id) && !DISPLAY_ONLY.has(id));
 console.log('');
 console.log('未被代码直接引用的 id: ' + (unused.length ? unused.join(', ') : '(无)'));
 if (dead.length) console.log('   其中非结构性元素(值得留意): ' + dead.join(', '));

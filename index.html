@@ -38,9 +38,10 @@
       <button class="btn primary" data-mode="endless">无 尽 模 式</button>
       <button class="btn" data-mode="challenge">挑 战 模 式 · 15 分 钟</button>
       <button class="btn" id="btnPets">🥚 宠 物 蛋</button>
+      <button class="btn" id="btnCodex">📖 查 看 图 鉴</button>
       <button class="btn" id="btnHelp">玩 法 说 明</button>
       <div class="hint">虚拟摇杆：按住屏幕任意位置拖动<br>攻击全自动 · 升级三选一 · 每10级出精英</div>
-      <div class="ver" id="verTxt">v1.5.3</div>
+      <div class="ver" id="verTxt">v1.6.0</div>
       <button class="btn tiny" id="btnResetFromMenu">重 置 存 档</button>
     </div>
   </div>
@@ -59,7 +60,8 @@
         ▸ <b>🥚宠物蛋</b>：金币孵化随机生肖，最多带 2 只出战<br>
         ▸ 宠物跟随等级成长，等级到 11 自动变异<br>
         ▸ 死亡结算金币，可在局外强化初始属性<br>
-        ▸ 按 <b>⏸暂停按钮</b> 或 ESC 可暂停/继续
+        ▸ 按 <b>⏸暂停按钮</b> 或 ESC 可暂停/继续<br>
+        ▸ 主菜单 <b>📖 查看图鉴</b> 记录遇到过的怪物与宠物
       </div>
       <button class="btn primary" id="btnHelpBack" style="margin-top:18px">返 回</button>
     </div>
@@ -90,7 +92,7 @@
   <div class="veil hidden" id="petHome">
     <div class="card">
       <div class="title" style="font-size:21px">宠 物 蛋</div>
-      <div class="sub">收集 12 生肖伙伴</div>
+      <div class="sub">收集 12 生肖伙伴（已补齐）</div>
       <div class="goldrow">💰 <span id="petGold">0</span></div>
       <div class="pet-grid" id="petGrid"></div>
       <div class="pet-detail" id="petDetail">
@@ -169,10 +171,21 @@
       <div id="dlgActions"></div>
     </div>
   </div>
+  <div class="veil hidden" id="codex">
+    <div class="card codexcard">
+      <div class="title" style="font-size:20px">图 鉴</div>
+      <div class="sub">CODEX</div>
+      <div class="codexprog" id="codexProg"></div>
+      <div class="codexscroll" id="codexBody"></div>
+      <div class="codexdetail" id="codexDetail"></div>
+      <button class="btn primary" id="btnCodexBack" style="margin-top:14px">返 回</button>
+    </div>
+  </div>
 </div>
 <script src="js/utils.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/game.js"></script>
+<script src="js/pets-extra.js"></script>
 <script src="js/pets.js"></script>
 <script src="js/skills.js"></script>
 <script src="js/render.js"></script>

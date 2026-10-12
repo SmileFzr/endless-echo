@@ -210,6 +210,7 @@ if (typeof document !== 'undefined') {
 }
 function backToMenu() {
   if (typeof closeNPCDialog === 'function') closeNPCDialog();
+  if (typeof closeCodex === 'function') el('codex').classList.add('hidden');
   el('townBar').classList.add('hidden');
   el('townPrompt').classList.add('hidden');
   el('btnTownAct').classList.add('hidden');
@@ -223,6 +224,7 @@ function backToMenu() {
 function requestReset() { el('pauseVeil').classList.add('hidden'); el('resetVeil').classList.remove('hidden'); }
 function doResetSave() {
   if (typeof closeNPCDialog === 'function') closeNPCDialog();
+  el('codex').classList.add('hidden');
   el('townBar').classList.add('hidden');
   el('townPrompt').classList.add('hidden');
   el('btnTownAct').classList.add('hidden');
@@ -240,6 +242,8 @@ function doResetSave() {
 }
 el('btnPause').onclick = (e) => { e.stopPropagation(); pauseGame(); };
 el('btnTownAct').onclick = () => townInteract();
+el('btnCodex').onclick = () => openCodex();
+el('btnCodexBack').onclick = () => closeCodex();
 if (typeof updateHudSpecials === 'function') updateHudSpecials();
 el('btnResume').onclick = () => resumeGame();
 el('btnRestart').onclick = () => {
@@ -373,6 +377,8 @@ function startGame(mode, petIds) {
     P.pets.push({ id, lv:1, mut:false, cd:rnd(0.2, 0.8), x:P.x + Math.cos(i * Math.PI) * 48, y:P.y + Math.sin(i * Math.PI) * 48, steal:0, breathT:0, breathTick:0, breathAngle:0 });
   });
   P.wingT = 0; P.bootsT = 0; P.specials = {};   // 特殊能力计时
+  P._monkeyT = 0; P._monkeyCast = 0; P._pigT = 0; P._horseTrail = 0;
+  if (typeof backfillSeenPets === 'function') backfillSeenPets();   // 图鉴: 已解锁的宠物记为已遇到
   const starters = ['homing', 'sword', 'lightning', 'bomb'];
   P.skills.push({ id:pick(starters), lv:1, mut:null, cd:0.5 });
   el('menu').classList.add('hidden'); el('over').classList.add('hidden');

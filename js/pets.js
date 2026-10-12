@@ -85,4 +85,6 @@ const PETS = {
       }
     }
   },
+  // 其余 8 只生肖由 js/pets-extra.js 提供并在此合并
+  ...(typeof PETS_EXTRA !== 'undefined' ? PETS_EXTRA : {}),
 };

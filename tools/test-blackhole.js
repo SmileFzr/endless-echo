@@ -71,11 +71,12 @@ vm.runInContext(order.map(n => fs.readFileSync(path.join(ROOT, 'js', n), 'utf8')
 
 const g = vm.runInContext(`({
   get G(){ return G; }, get P(){ return P; }, get SAVE(){ return SAVE; }, set SAVE(v){ SAVE = v; },
-  SPECIALS, NPCS, T,
+  SPECIALS, NPCS, T, PETS, ENEMY_TYPES, SHOP_ITEMS,
   startGame, updateBlackHole, enterTown, leaveTown, townInteract, updateTown, drawTown,
   openNPCDialog, closeNPCDialog, useSpecial, updateSpecials, questTick, bhEligible,
   ownedSpecials, syncSpecialBars, drawBlackHole, drawBlackHoleIndicator, update,
   el, writeSave,
+  seenList: k => seenList(k), markSeen: (k, id) => markSeen(k, id),
   get enemies(){ return enemies; }
 })`, ctx);
 
@@ -276,7 +277,128 @@ const dNorm = moveDist();
 ok(dWing > dNorm * 1.5, '风之翼期间移动距离显著变长: ' + dWing.toFixed(1) + ' vs ' + dNorm.toFixed(1));
 
 console.log('');
-console.log('=== 11. 重置存档保留特殊能力 ===');
+console.log('=== 12. 图鉴: 只显示遇到过的, 没遇到只留空框 ===');
+resetSave();
+g.startGame('endless', []);
+// 开局什么都没遇到
+ok(g.seenList('enemy').length === 0, '开局没有遇到任何怪物');
+g.markSeen('enemy', 'normal');
+ok(g.seenList('enemy').indexOf('normal') >= 0, '记录"遇到过普通怪"成功');
+g.markSeen('enemy', 'normal');
+ok(g.seenList('enemy').filter(x => x === 'normal').length === 1, '同一种怪物不会重复记录');
+// 击杀怪物应自动记录
+const foe = vm.runInContext('spawnOne(), enemies[enemies.length-1]', ctx);
+g.markSeen('enemy', foe.type);
+ok(g.seenList('enemy').length >= 1, '击杀后图鉴里有了记录');
+
+// 打开图鉴
+const gOpen = vm.runInContext('openCodex', ctx);
+const gClose = vm.runInContext('closeCodex', ctx);
+gOpen();
+ok(g.G.state === 'codex', '打开图鉴后 state = codex');
+ok(!elements.get('codex').classList.contains('hidden'), '图鉴面板已显示');
+const body = elements.get('codexBody');
+ok(body.children.length > 0, '图鉴里渲染出了分组内容 (' + body.children.length + ' 个区块)');
+// 统计"点亮"与"未点亮"
+const all = [];
+(function walk(node) { for (const c of node.children) { if (c.className && c.className.indexOf('codexitem') >= 0) all.push(c); walk(c); } })(body);
+const locked = all.filter(n => n.className.indexOf('locked') >= 0);
+const lit = all.filter(n => n.className.indexOf('locked') < 0);
+ok(all.length === Object.keys(g.ENEMY_TYPES).length + Object.keys(g.PETS).length,
+   '图鉴条目总数 = 怪物 ' + Object.keys(g.ENEMY_TYPES).length + ' + 宠物 ' + Object.keys(g.PETS).length +
+   ' (实际 ' + all.length + ')');
+ok(locked.length > 0, '没遇到的条目显示为空框 (共 ' + locked.length + ' 个未点亮)');
+ok(lit.length === g.seenList('enemy').length + g.seenList('pet').length,
+   '点亮的条目数 = 已遇到的怪物 + 宠物 (' + lit.length + ')');
+// 空框不该可点击
+ok(locked.every(n => !n.onclick), '未点亮的条目不可点击');
+
+// 点亮全部后锁定项应为 0
+const gDbgCodex = vm.runInContext('window.dbgCodex', ctx);
+gDbgCodex();
+gOpen();
+const body2 = elements.get('codexBody');
+const all2 = [];
+(function walk(node) { for (const c of node.children) { if (c.className && c.className.indexOf('codexitem') >= 0) all2.push(c); walk(c); } })(body2);
+ok(all2.filter(n => n.className.indexOf('locked') >= 0).length === 0, 'dbgCodex() 之后全部点亮');
+gClose();
+ok(g.G.state === 'menu' || g.G.state === 'playing', '关闭图鉴后回到之前的状态 (' + g.G.state + ')');
+
+console.log('');
+console.log('=== 14. 12 生肖宠物: 被动的数值效果 ===');
+resetSave();
+g.startGame('endless', []);
+const baseStats = { speed: g.P.speed, crit: g.P.crit, armor: g.P.dmgReduce, maxHp: g.P.maxHp };
+ok(baseStats.speed > 0, '基准: speed=' + baseStats.speed.toFixed(1) + ' crit=' + baseStats.crit.toFixed(3) +
+   ' armor=' + baseStats.armor.toFixed(3) + ' maxHp=' + baseStats.maxHp);
+
+/* 直接往 P.pets 里塞宠物, 再 recalcStats 看数值变化 */
+function withPets(list) {
+  g.P.pets = list.map(([id, lv, mut]) => ({ id, lv, mut: !!mut, cd: 0, x: g.P.x, y: g.P.y }));
+  vm.runInContext('recalcStats()', ctx);
+  return { speed: g.P.speed, crit: g.P.crit, armor: g.P.dmgReduce, maxHp: g.P.maxHp };
+}
+
+const horse = withPets([['horse', 8, false]]);
+ok(horse.speed > baseStats.speed, '🐴 马: 移速 ' + baseStats.speed.toFixed(1) + ' → ' + horse.speed.toFixed(1));
+const horseMut = withPets([['horse', 8, true]]);
+ok(horseMut.speed > horse.speed, '🐴 马(变异): 加成翻倍 → ' + horseMut.speed.toFixed(1));
+
+const rooster = withPets([['rooster', 10, false]]);
+ok(rooster.crit > baseStats.crit, '🐔 鸡: 暴击 ' + baseStats.crit.toFixed(3) + ' → ' + rooster.crit.toFixed(3));
+
+const ox = withPets([['ox', 10, false]]);
+ok(ox.armor > baseStats.armor, '🐮 牛: 减伤 ' + baseStats.armor.toFixed(3) + ' → ' + ox.armor.toFixed(3));
+ok(ox.maxHp > baseStats.maxHp, '🐮 牛: 生命上限 ' + baseStats.maxHp + ' → ' + ox.maxHp);
+const oxMut = withPets([['ox', 10, true]]);
+ok(oxMut.armor > ox.armor, '🐮 牛(变异): 减伤翻倍 → ' + oxMut.armor.toFixed(3));
+
+// 羊: 持续回血
+withPets([['sheep', 6, false]]);
+g.P.hp = g.P.maxHp * 0.5;
+const sheepHpBefore = g.P.hp;
+vm.runInContext('updatePassivePets(1.0)', ctx);
+ok(g.P.hp > sheepHpBefore, '🐑 羊: 1 秒后回血 ' + Math.round(sheepHpBefore) + ' → ' + Math.round(g.P.hp));
+// 变异后残血回复更快
+withPets([['sheep', 6, true]]);
+g.P.hp = g.P.maxHp * 0.4;
+const h1 = g.P.hp;
+vm.runInContext('updatePassivePets(1.0)', ctx);
+const healMut = g.P.hp - h1;
+withPets([['sheep', 6, false]]);
+g.P.hp = g.P.maxHp * 0.8;   // 高于一半, 不触发变异加成
+const h2 = g.P.hp;
+vm.runInContext('updatePassivePets(1.0)', ctx);
+const healNorm = g.P.hp - h2;
+ok(healMut > healNorm, '🐑 羊(变异): 残血回复更快 (' + healMut.toFixed(1) + ' vs ' + healNorm.toFixed(1) + ')');
+
+// 猴: 减少技能冷却
+withPets([['monkey', 5, false]]);
+g.P.skills = [{ id: 'homing', lv: 5, mut: null, cd: 3 }];
+vm.runInContext('P._monkeyT = 0; updatePassivePets(0.1)', ctx);
+ok(g.P.skills[0].cd < 3, '🐵 猴: 技能冷却被缩短 3.00 → ' + g.P.skills[0].cd.toFixed(2));
+
+// 猪: 金币掉落增加(统计多次击杀的平均值)
+resetSave();
+g.startGame('endless', []);
+function goldFromKills(n) {
+  g.G.runGold = 0;
+  for (let i = 0; i < n; i++) {
+    const e = vm.runInContext('spawnOne(), enemies[enemies.length-1]', ctx);
+    vm.runInContext('hurtEnemy(enemies[enemies.length-1], 1e9)', ctx);
+  }
+  return g.G.runGold;
+}
+const goldNoPig = goldFromKills(200);
+withPets([['pig', 12, false]]);
+const goldWithPig = goldFromKills(200);
+ok(goldWithPig > goldNoPig, '🐷 猪: 200 次击杀金币 ' + goldNoPig + ' → ' + goldWithPig);
+ok(Object.keys(g.PETS).length === 12, '宠物总数 = ' + Object.keys(g.PETS).length + ' (十二生肖齐全)');
+const zodiac = ['rat','ox','tiger','rabbit','dragon','snake','horse','sheep','monkey','rooster','dog','pig'];
+ok(zodiac.every(k => !!g.PETS[k]), '十二生肖一个不少: ' + zodiac.map(k => g.PETS[k].emoji).join(''));
+
+console.log('');
+console.log('=== 15. 重置存档保留特殊能力 ===');
 g.SAVE.specials = { wing: true };
 const doReset = vm.runInContext('doResetSave', ctx);
 doReset();

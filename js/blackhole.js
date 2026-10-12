@@ -482,6 +482,71 @@ function updateSpecials(dt) {
   // 翅膀/靴子的可见特效
   if (P.wingT > 0) effects.push({ kind: 'ring', x: P.x, y: P.y, life: 0.25, max: 0.25, r: 26, col: '#8ab4ff' });
   if (P.bootsT > 0) effects.push({ kind: 'ring', x: P.x, y: P.y, life: 0.25, max: 0.25, r: 30, col: '#ffd76a' });
+  updatePassivePets(dt);
+}
+
+/* ---------------- 被动生肖宠物的效果 ----------------
+   放在这里而不是 pets.js, 是因为这些效果依赖 RECALC 之后的属性,
+   并且在 update 流程中执行; 数值部分由 recalcStats() 汇总。 */
+function passivePetLv(id) {
+  if (!P || !P.pets) return 0;
+  let lv = 0;
+  for (const p of P.pets) if (p.id === id) lv = Math.max(lv, p.lv);
+  return lv;
+}
+
+function passivePetMut(id) {
+  if (!P || !P.pets) return false;
+  for (const p of P.pets) if (p.id === id && p.mut) return true;
+  return false;
+}
+
+function updatePassivePets(dt) {
+  if (!P.pets || !P.pets.length) return;
+
+  // 🐑 羊: 持续回血, 变异后残血时回复翻倍
+  const sheepLv = passivePetLv('sheep');
+  if (sheepLv > 0) {
+    let heal = 0.8 * sheepLv;
+    if (passivePetMut('sheep') && P.hp < P.maxHp * 0.5) heal *= 2;
+    P.hp = Math.min(P.maxHp, P.hp + heal * dt);
+  }
+
+  // 🐵 猴: 每 3 秒给所有技能减 0.6 秒冷却; 变异后每 5 秒额外施放一次技能
+  const monkeyLv = passivePetLv('monkey');
+  if (monkeyLv > 0) {
+    P._monkeyT = (P._monkeyT || 0) - dt;
+    if (P._monkeyT <= 0) {
+      P._monkeyT = 3;
+      for (const s of P.skills) { const def = SKILLS[s.id]; if (def && !def.passive) s.cd = Math.max(0, s.cd - 0.6); }
+    }
+    if (passivePetMut('monkey')) {
+      P._monkeyCast = (P._monkeyCast || 0) - dt;
+      if (P._monkeyCast <= 0) {
+        P._monkeyCast = 5;
+        const usable = P.skills.filter(s => { const d = SKILLS[s.id]; return d && !d.passive; });
+        if (usable.length) {
+          const s = usable[(Math.random() * usable.length) | 0];
+          SKILLS[s.id].fire(s);
+          effects.push({ kind: 'ring', x: P.x, y: P.y, life: 0.35, max: 0.35, r: 44, col: '#ffd76a' });
+        }
+      }
+    }
+  }
+  // 🐴 马: 变异后额外留下一串加速残影
+  if (passivePetMut('horse') && P.moving) {
+    P._horseTrail = (P._horseTrail || 0) - dt;
+    if (P._horseTrail <= 0) { P._horseTrail = 0.22; effects.push({ kind: 'ring', x: P.x, y: P.y, life: 0.3, max: 0.3, r: 20, col: '#cfe8ff' }); }
+  }
+  // 🐷 猪: 变异后每隔一会自动掉一枚大经验球(福气外溢)
+  if (passivePetMut('pig')) {
+    P._pigT = (P._pigT || 0) - dt;
+    if (P._pigT <= 0) {
+      P._pigT = 12;
+      if (orbs.length < 200) orbs.push({ x: P.x + rnd(-30, 30), y: P.y + rnd(-30, 30), vx: 0, vy: 0, v: 6, r: 8, life: 30, pulling: false, spin: 0, big: true });
+      effects.push({ kind: 'ring', x: P.x, y: P.y, life: 0.4, max: 0.4, r: 60, col: '#ffd76a' });
+    }
+  }
 }
 
 /* 特殊能力条: 城镇顶栏与主地图 HUD 共用同一套渲染 */
@@ -742,6 +807,151 @@ function updateHudSpecials() {
 }
 
 /* ============================================================
+   图鉴的"已遇到"记录
+   ============================================================ */
+
+/* 记录见过的怪物 / 宠物, 供主菜单图鉴使用 */
+function markSeen(kind, id) {
+  if (!id) return;
+  ensureSaveSlots();
+  const key = kind === 'enemy' ? 'seenEnemies' : 'seenPets';
+  const list = SAVE[key] || (SAVE[key] = []);
+  if (list.indexOf(id) < 0) { list.push(id); writeSave(); }
+}
+
+function seenList(kind) {
+  ensureSaveSlots();
+  const list = SAVE[kind === 'enemy' ? 'seenEnemies' : 'seenPets'];
+  return Array.isArray(list) ? list : [];
+}
+
+/* 兼容老存档: 已经解锁或正在出战的宠物, 视为已见过 */
+function backfillSeenPets() {
+  if (!P || !P.pets) return;
+  let changed = false;
+  ensureSaveSlots();
+  const list = SAVE.seenPets || (SAVE.seenPets = []);
+  for (const p of P.pets) {
+    if (p && p.id && list.indexOf(p.id) < 0) { list.push(p.id); changed = true; }
+  }
+  if (changed) writeSave();
+}
+
+/* ============================================================
+   图鉴 / codex
+   只显示已经遇到过的宠物与怪物; 没遇到的只留一个空框
+   ============================================================ */
+
+/* 图鉴里面板与卡片是动态生成的; 小地图样式只在有元素时才注入 */
+function codexEnsureStyle() {
+  if (document.getElementById('codexStyle')) return;
+  const st = document.createElement('style');
+  st.id = 'codexStyle';
+  st.textContent = '.codexmini{display:block;font-size:10px;opacity:.55;margin-top:1px}';
+  document.head.appendChild(st);
+}
+
+function openCodex() {
+  G._codexPrev = G.state;
+  G.state = 'codex';
+  renderCodex();
+  el('codex').classList.remove('hidden');
+}
+
+function closeCodex() {
+  el('codex').classList.add('hidden');
+  G.state = G._codexPrev === 'playing' ? 'playing' : 'menu';
+  G._codexPrev = null;
+}
+
+function codexItem(emoji, name, sub, cls, seenId, kind) {
+  const seen = seenId === null || seenList(kind).indexOf(seenId) >= 0;
+  const d = document.createElement('div');
+  d.className = 'codexitem' + (cls ? ' ' + cls : '') + (seen ? '' : ' locked');
+  if (seen) {
+    d.innerHTML = '<div class="ce">' + emoji + '</div>' +
+                  '<div class="cn">' + name + '</div>' +
+                  '<div class="cs">' + sub + '</div>';
+    if (seenId !== null) d.onclick = () => codexDetail(kind, seenId);
+  } else {
+    d.innerHTML = '<div class="ce">❓</div><div class="cn">???</div><div class="cs">尚未遇到</div>';
+  }
+  return d;
+}
+
+function codexSection(parent, title, hint) {
+  const h = document.createElement('div');
+  h.className = 'codexsec';
+  h.innerHTML = title + (hint ? '<span>' + hint + '</span>' : '');
+  parent.appendChild(h);
+  const grid = document.createElement('div');
+  grid.className = 'codexgrid';
+  parent.appendChild(grid);
+  return grid;
+}
+
+function renderCodex() {
+  codexEnsureStyle();
+  const body = el('codexBody');
+  if (!body) return;
+  body.innerHTML = '';
+
+  const pets = Object.keys(PETS), foes = Object.keys(ENEMY_TYPES);
+  const seenP = seenList('pet'), seenE = seenList('enemy');
+  const cntP = pets.filter(k => seenP.indexOf(k) >= 0).length;
+  const cntE = foes.filter(k => seenE.indexOf(k) >= 0).length;
+  el('codexProg').innerHTML =
+    '宠物 ' + cntP + ' / ' + pets.length + '　·　怪物 ' + cntE + ' / ' + foes.length +
+    '<br><span style="opacity:.7">遇到过的才会点亮，没遇到的只留一个空框</span>';
+
+  // 怪物(含精英)
+  const g1 = codexSection(body, '怪物', '共 ' + foes.length + ' 种');
+  for (const k of foes) {
+    const t = ENEMY_TYPES[k];
+    const label = t.elite ? '精英' : (k === 'normal' ? '普通' : (t.ranged ? '远程' : (t.explode ? '自爆' : '近战')));
+    g1.appendChild(codexItem(t.sprite, t.elite ? '精英怪' : k, label, t.elite ? 'enemy elite' : 'enemy', k, 'enemy'));
+  }
+  // 宠物
+  const g2 = codexSection(body, '生肖宠物', '已收集 ' + cntP + ' / ' + pets.length);
+  for (const k of pets) {
+    const p = PETS[k];
+    g2.appendChild(codexItem(p.emoji, p.name, p.skill, 'pet', k, 'pet'));
+  }
+
+  codexDetail('enemy', foes.find(k => seenE.indexOf(k) >= 0) || null);
+}
+
+function codexDetail(kind, id) {
+  const box = el('codexDetail');
+  if (!box) return;
+  if (!id) {
+    box.innerHTML = '<div class="cdname">点击卡片查看详情</div>' +
+      '<div class="cdrow">先去遇到它们，图鉴里才会点亮。</div>';
+    return;
+  }
+  if (kind === 'pet') {
+    const p = PETS[id];
+    if (!p) return;
+    box.innerHTML = '<div class="cdname">' + p.emoji + ' ' + p.name + ' · <span class="cdskill">' + p.skill + '</span></div>' +
+      '<div class="cdrow">' + p.desc + '</div>' +
+      '<div class="cdrow" style="color:#ffb347;margin-top:3px">🐾 变异：' + p.mutText + '</div>';
+  } else {
+    const t = ENEMY_TYPES[id];
+    if (!t) return;
+    box.innerHTML = '<div class="cdname">' + t.sprite + ' ' + (t.elite ? '精英怪' : id) + '</div>' +
+      '<div class="cdrow">生命 ' + t.hp + '　速度 ' + t.speed + '　接触伤害 ' + t.dmg + '　经验 ' + t.exp + '</div>' +
+      '<div class="cdrow" style="margin-top:3px">' +
+      (t.elite ? '每 10 级刷新一只；击杀后小怪永久强化，并解锁新的小怪种类'
+               : (t.ranged ? '保持距离发射子弹' :
+                  t.explode ? '贴近后自爆，死亡时造成范围伤害' :
+                  id === 'tank' ? '血量与伤害都很高的重装单位' :
+                  id === 'fast' ? '移动极快的突进单位' :
+                  id === 'swarm' ? '血量很低但数量众多的群体单位' : '最基础的近战单位')) +
+      '</div>';
+  }
+}
+
+/* ============================================================
    调试辅助(仅供试玩时在浏览器控制台使用, 不影响正常玩法)
    ============================================================ */
 
@@ -778,5 +988,17 @@ if (typeof window !== 'undefined') {
     if (P) { P.specials = {}; for (const id of Object.keys(SPECIALS)) P.specials[id] = { cd: 0 }; }
     syncSpecialBars();
     toast('已解锁全部特殊能力');
+  };
+  window.dbgCodex = () => {                // 图鉴: 点亮全部条目
+    ensureSaveSlots();
+    SAVE.seenEnemies = Object.keys(ENEMY_TYPES).slice();
+    SAVE.seenPets = Object.keys(PETS).slice();
+    writeSave();
+    if (G.state === 'codex') renderCodex();
+    return '图鉴已全部点亮 (' + SAVE.seenEnemies.length + ' 怪 / ' + SAVE.seenPets.length + ' 宠物)';
+  };
+  window.dbgSeen = () => {                 // 查看当前已遇到的条目
+    ensureSaveSlots();
+    return { 怪物: seenList('enemy'), 宠物: seenList('pet') };
   };
 }

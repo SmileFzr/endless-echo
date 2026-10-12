@@ -97,26 +97,30 @@ function drawEnemies() {
     if (e.acid > 0) { ctx.strokeStyle = 'rgba(140,255,120,0.65)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 3, 0, TAU); ctx.stroke(); }
     if (e.burn > 0.2) { ctx.strokeStyle = `rgba(255,140,50,${Math.min(0.9, 0.4 + e.burn * 0.12)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 5, 0, TAU); ctx.stroke(); }
     // ★ 精英怪血条：加粗加长
+    // 精英怪血条: 环绕本体的圆环(线宽沿用原来的 10)
     if (e.elite) {
-      const w = 120, h = 10;
-      const x = e.x - w / 2, y = e.y - e.r - 26;
-      ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
-      ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(x, y, w, h);
+      const ringR = e.r + 14, lw = 10;
+      const start = -Math.PI / 2;
       const hpPct = clamp(e.hp / e.maxHp, 0, 1);
-      const grad = ctx.createLinearGradient(x, y, x + w, y);
-      grad.addColorStop(0, '#ff4d5e'); grad.addColorStop(1, '#ff8c42');
-      ctx.fillStyle = grad;
-      ctx.fillRect(x, y, w * hpPct, h);
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, w, h);
-      // 血量数字
+      ctx.beginPath(); ctx.arc(e.x, e.y, ringR, 0, TAU);
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = lw + 3; ctx.stroke();
+      ctx.beginPath(); ctx.arc(e.x, e.y, ringR, 0, TAU);
+      ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = lw; ctx.stroke();
+      if (hpPct > 0.002) {
+        const grad = ctx.createLinearGradient(e.x - ringR, e.y, e.x + ringR, e.y);
+        grad.addColorStop(0, '#ff4d5e'); grad.addColorStop(1, '#ff8c42');
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, ringR, start, start + TAU * hpPct);
+        ctx.strokeStyle = grad; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
+        ctx.lineCap = 'butt';
+      }
       ctx.font = 'bold 11px system-ui';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#fff';
-      ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.lineWidth = 3;
       const hpText = Math.ceil(e.hp) + ' / ' + Math.round(e.maxHp);
-      ctx.strokeText(hpText, e.x, y - 8);
-      ctx.fillText(hpText, e.x, y - 8);
+      ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.lineWidth = 3;
+      ctx.strokeText(hpText, e.x, e.y - ringR - 13);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(hpText, e.x, e.y - ringR - 13);
     }
   }
 }

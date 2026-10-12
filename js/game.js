@@ -79,6 +79,14 @@ function recalcStats() {
   const u = P.up;
   dmg += u.dmg * 0.08; spd += u.speed * 0.07; cdr += u.cdr * 0.06; pick += u.pickup * 14;
   hpBonus += u.maxhp * 22; armor += u.armor * 0.05; regen += u.regen * 0.5; crit += u.crit * 0.04;
+  // 被动生肖宠物: 🐴马 提速 / 🐔鸡 提暴击 / 🐮牛 减伤+加血
+  if (P.pets) {
+    for (const pet of P.pets) {
+      if (pet.id === 'horse') spd += Math.min(0.24, pet.lv * 0.02) * (pet.mut ? 2 : 1);
+      if (pet.id === 'rooster') crit += Math.min(0.30, pet.lv * 0.02);
+      if (pet.id === 'ox') { armor += Math.min(0.30, pet.lv * 0.02) * (pet.mut ? 2 : 1); hpBonus += pet.lv * 8; }
+    }
+  }
   for (const s of P.skills) {
     if (s.id === 'expgain') expm += s.lv * 0.10;
     if (s.id === 'pickup') pick += s.lv * 12;
@@ -114,6 +122,7 @@ function hurtEnemy(e, dmg, isCrit) {
   if (e.dead) return;
   if (e.acid > 0) dmg *= 1.3;
   if (e.burn > 0) dmg *= (1 + e.burn * 0.05);
+  if (e.poison > 0) dmg *= (1 + e.poison * 0.04);   // 中毒状态增伤
   if (e.elite) dmg *= 1.4;  // ★ 新增：对精英怪伤害加成
   const d = Math.max(1, Math.round(dmg));
   e.hp -= d; e.flash = 0.09;
@@ -123,12 +132,21 @@ function hurtEnemy(e, dmg, isCrit) {
 function killEnemy(e) {
   if (e.dead) return;
   e.dead = true; G.kills++; sfx('kill');
+  markSeen('enemy', e.type);   // 图鉴: 见过即记录
   if (e.elite) { G.eliteAlive = false; onEliteKilled(e); return; }
   if (orbs.length < 200) {
     const n = e.exp;
     for (let i = 0; i < Math.min(n, 4); i++) orbs.push({ x:e.x+rnd(-10,10), y:e.y+rnd(-10,10), vx:rnd(-40,40), vy:rnd(-40,40), v:e.exp/Math.min(n,4), r:5, life:30, pulling:false, spin:Math.random()*TAU });
   }
-  G.runGold += e.explode ? 3 : 1;
+  let goldGain = e.explode ? 3 : 1;
+  const pigLv = (P.pets || []).reduce((m, p) => p.id === 'pig' ? Math.max(m, p.lv) : m, 0);
+  // 最多 +1 枚, 且随等级提高触发概率(20 级时约 +45%)
+  if (pigLv > 0) {
+    const chance = Math.min(0.45, 0.10 + pigLv * 0.018);
+    const bonus = 1 + (Math.random() < chance ? 1 : 0);
+    goldGain = Math.round(goldGain * bonus);
+  }
+  G.runGold += goldGain;
   if (e.explode) { effects.push({ kind:'boom', x:e.x, y:e.y, life:0.35, max:0.35, r:70, col:'#ff5f6d' }); if (Math.hypot(P.x - e.x, P.y - e.y) < 70 + P.r) damagePlayer(e.dmg * 0.7); G.shake = Math.max(G.shake, 6); }
   if (effects.length < 100) effects.push({ kind:'poof', x:e.x, y:e.y, life:0.28, max:0.28, r:e.r });
   const eg = getSkill('expgain');
@@ -374,6 +392,18 @@ function updateEnemies(dt) {
     if (e.flash > 0) e.flash -= dt;
     if (e.acid > 0) e.acid -= dt;
     if (e.burn > 0) e.burn -= dt * 0.5;
+    if (e.poison > 0) {
+      // 中毒: 每 0.5 秒结算一次持续伤害, 并逐秒衰减
+      e.poison -= dt * 0.5;
+      e.poisonTick = (e.poisonTick || 0) - dt;
+      if (e.poisonTick <= 0) {
+        e.poisonTick = 0.5;
+        const pd = Math.max(1, Math.round(e.poison * 3));
+        e.hp -= pd; e.flash = 0.06;
+        if (texts.length < 30) texts.push({ x: e.x + rnd(-6, 6), y: e.y - e.r - 4, v: -40, life: 0.5, max: 0.5, t: String(pd), crit: false });
+        if (e.hp <= 0) { e.poison = 0; killEnemy(e); }
+      }
+    }
     if (e.atkCd > 0) e.atkCd -= dt;
     const dx = P.x - e.x, dy = P.y - e.y;
     const dist = Math.hypot(dx, dy) || 1;
