@@ -145,6 +145,10 @@ TOWN_CSS = """
     border-radius:0 10px 10px 0;padding:10px 12px;color:#dcdcf0}
   .dlg .dlgmeta{font-size:11.5px;opacity:.7;margin-top:8px}
   #dlgActions .btn{margin-top:10px}
+  /* 窄屏(手机竖屏)下让特殊能力条独占一行, 避免和技能栏挤在一起 */
+  @media (max-width:430px){
+    #hudSpecials{flex:1 0 100%;justify-content:flex-start;margin-top:4px}
+  }
 """
 
 titles = [t for t in (section_title(l) for l in js_body) if t]
