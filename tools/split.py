@@ -100,6 +100,7 @@ TOWN_HTML = """<div id="townBar" class="hidden">
     <div class="town-head">
       <span class="town-name">🌆 回声小镇</span>
       <span class="town-note">绝对安全 · 南门可离开</span>
+      <span class="town-note town-tip">拖动屏幕移动 · 靠近 NPC 按 F 交谈 · 南门离开</span>
     </div>
     <div id="townSkills"></div>
   </div>
@@ -129,10 +130,15 @@ TOWN_CSS = """
   /* ---------- 黑洞小镇 ---------- */
   #townBar{position:absolute;top:0;left:0;right:0;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;
     display:flex;align-items:flex-start;gap:10px;pointer-events:none;z-index:4}
+  /* 窄屏: 左侧文字允许压缩换行, 免得把右上角的技能图标挤出屏幕 */
+  #townBar .town-head{flex:1 1 auto;min-width:0;text-shadow:0 1px 6px rgba(20,45,30,.55)}
+  #townBar .town-name,#townBar .town-note{white-space:normal;overflow-wrap:break-word}
+  #townBar #townSkills{flex:0 0 auto;margin-left:auto}
   #townBar.hidden{display:none!important}
   .town-head{display:flex;flex-direction:column;gap:2px}
   .town-name{font-size:14px;font-weight:800;color:#ffe9b0;text-shadow:0 2px 8px #000;letter-spacing:1px}
   .town-note{font-size:10.5px;opacity:.6}
+  .town-tip{margin-top:3px;opacity:.72;letter-spacing:.3px}
   #townSkills,#hudSpecials{display:flex;gap:6px;pointer-events:auto;margin-left:auto}
   #hudSpecials{margin-left:0;justify-content:flex-end;margin-top:5px;min-height:0}
   .spkey{position:relative;width:34px;height:34px;border-radius:9px;cursor:pointer;
@@ -259,7 +265,7 @@ PATCHES = {
          '        <div class="hudbtns">'),
         # 主菜单显示版本号(以后改版本只需改这里)
         ('<button class="btn tiny" id="btnResetFromMenu">',
-         '<div class="ver" id="verTxt">v1.8.0</div>\n'
+         '<div class="ver" id="verTxt">v1.8.1</div>\n'
          '      <button class="btn tiny" id="btnResetFromMenu">'),
         # 主菜单加"查看图鉴"按钮
         ('<button class="btn" id="btnHelp">玩 法 说 明</button>',

@@ -862,30 +862,147 @@ function drawTown() {
   ctx.fillStyle = mist;
   ctx.fillRect(0, townSkyH - 8, W, 62);
 
-  /* ---------- 7) 标题与提示(屏幕坐标) ---------- */
+  /* ---------- 7) 标题与提示(屏幕坐标)
+     顶部被 DOM 的 HUD 占着(经验条 / 统计 / 特殊技能图标), 窄屏上会和标题重叠。
+     所以先量出 HUD 实际占用的矩形, 再把文字放进空档; 放不下就整体下移。 ---------- */
+  // 顶部文字平时交给 DOM 的 #townBar(不会和技能图标打架);
+  // 万一 townBar 不在(结构变动), 才在画布上兜底画一次。
+  if (!hudRect('townBar')) drawTownTopText();
+}
+
+/* 量一个 DOM 元素在屏幕坐标里的矩形(取不到或不可见就返回 null) */
+function hudRect(id) {
+  if (typeof document === 'undefined' || !document.getElementById) return null;
+  const e = document.getElementById(id);
+  if (!e || typeof e.getBoundingClientRect !== 'function') return null;
+  const r = e.getBoundingClientRect();
+  if (!r || r.width <= 0 || r.height <= 0) return null;
+  if (e.classList && e.classList.contains && e.classList.contains('hidden')) return null;
+  return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+}
+
+/* 真正会挡住字的东西: 经验条那一片、右上角统计与技能、以及提示 toast */
+function hudBlockers() {
+  const out = [];
+  for (const id of ['expwrap', 'stats', 'hudSpecials', 'petbar']) {
+    const r = hudRect(id);
+    if (r) out.push(r);
+  }
+  // #hud 里也可能有没包住的按钮(音效/暂停)
+  const btn = hudRect('btnAudio') || hudRect('btnPause');
+  if (btn) out.push({ top: btn.top - 2, bottom: btn.bottom + 2, left: btn.left - 2, right: btn.right + 2 });
+
+  // toast: #toast 有淡出动画, 正在淡出(opacity<0.1)就不算
+  const tEl = (typeof document !== 'undefined' && document.getElementById)
+    ? document.getElementById('toast') : null;
+  if (tEl && typeof tEl.getBoundingClientRect === 'function') {
+    const op = parseFloat((tEl.style && tEl.style.opacity) || '0');
+    if (!(op >= 0 && op < 0.1)) {
+      const tr = tEl.getBoundingClientRect();
+      if (tr && tr.height > 0) out.push({ top: tr.top - 4, bottom: tr.bottom + 4, left: tr.left - 4, right: tr.right + 4 });
+    }
+  }
+  return out;
+}
+
+/* 居中的一条药丸: 返回它占的矩形 */
+function pillBox(cx, cy, w, h) {
+  return { left: cx - w / 2, right: cx + w / 2, top: cy - h / 2, bottom: cy + h / 2 };
+}
+function boxHits(box, blockers) {
+  for (const b of blockers) {
+    if (!(box.right < b.left || box.left > b.right || box.bottom < b.top || box.top > b.bottom)) return true;
+  }
+  return false;
+}
+
+function drawTownTopText() {
   const cx = W / 2;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const title = '🌿 回声小镇 · 山谷里的村庄';
-  ctx.font = fnt(15, 'bold');
-  const tw2 = ctx.measureText(title).width + 34;
-  ctx.fillStyle = 'rgba(255,248,233,0.88)';
+
+  const small = W < 560;
+  const titleSize = small ? 12.5 : 15;
+  const tipSize = small ? 10 : 11;
+  const titleText = '🌿 回声小镇 · 山谷里的村庄';
+  const tipText = '拖动屏幕移动　靠近 NPC 按 F 交谈　南门离开';
+
+  ctx.font = fnt(titleSize, 'bold');
+  const titleW = ctx.measureText(titleText).width + (small ? 24 : 34);
+  const titleH = small ? 24 : 30;
+  ctx.font = fnt(tipSize);
+  const tipW = ctx.measureText(tipText).width + (small ? 18 : 22);
+  const tipH = small ? 19 : 22;
+
+  const blockers = hudBlockers();
+
+  /* 先试: 两行都放在最上面一行的空档里(左有经验条, 右有统计/技能)。
+     提示比标题宽, 所以以提示的宽度判断能不能塞进空档。 */
+  let titleY = -1, tipY = -1;
+
+  // 空档 = 左边 HUD 的右缘 与 右上角 HUD 的左缘 之间
+  let gapL = 0, gapR = W;
+  for (const b of blockers) {
+    if (b.top < 48 && b.bottom > 0) {          // 只算屏幕顶部那一行的
+      if (b.left < W * 0.5) gapL = Math.max(gapL, b.right);
+      else gapR = Math.min(gapR, b.left);
+    }
+  }
+  const fits = (gapR - gapL) >= Math.max(titleW, tipW) + 8;
+  if (fits) {
+    const t1 = small ? 24 : 30;
+    const s1 = t1 + titleH / 2 + 3 + tipH / 2;
+    if (!boxHits(pillBox(cx, t1, titleW, titleH), blockers) &&
+        !boxHits(pillBox(cx, s1, tipW, tipH), blockers)) {
+      titleY = t1; tipY = s1;
+    }
+  }
+
+  /* 塞不下(手机竖屏): 从上往下找一个不重叠的位置 */
+  if (titleY < 0) {
+    let y = (small ? 20 : 26) + titleH / 2;
+    const maxY = H - 40 - tipH;
+    for (let guard = 0; guard < 60; guard++) {
+      const tb = pillBox(cx, y, titleW, titleH);
+      const sb = pillBox(cx, y + titleH / 2 + 3 + tipH / 2, tipW, tipH);
+      if (!boxHits(tb, blockers) && !boxHits(sb, blockers)) break;
+      y += stepTowardNextBlocker(cx, y, Math.max(titleW, tipW), blockers);
+      if (y > maxY) { y = maxY; break; }
+    }
+    titleY = y;
+    tipY = y + titleH / 2 + 3 + tipH / 2;
+  }
+
+  /* 标题 */
+  ctx.font = fnt(titleSize, 'bold');
+  ctx.fillStyle = 'rgba(255,248,233,0.90)';
   ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(cx - tw2 / 2, 14, tw2, 30, 15);
-  else ctx.rect(cx - tw2 / 2, 14, tw2, 30);
+  if (ctx.roundRect) ctx.roundRect(cx - titleW / 2, titleY - titleH / 2, titleW, titleH, titleH / 2);
+  else ctx.rect(cx - titleW / 2, titleY - titleH / 2, titleW, titleH);
   ctx.fill();
   ctx.fillStyle = '#3b5545';
-  ctx.fillText(title, cx, 29.5);
+  ctx.fillText(titleText, cx, titleY + 0.5);
 
-  const tip = '拖动屏幕移动　靠近 NPC 按 F 交谈　南门离开';
-  ctx.font = fnt(11);
-  const tw3 = ctx.measureText(tip).width + 22;
-  ctx.fillStyle = 'rgba(255,248,233,0.72)';
+  /* 操作提示 */
+  ctx.font = fnt(tipSize);
+  ctx.fillStyle = 'rgba(255,248,233,0.78)';
   ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(cx - tw3 / 2, 48, tw3, 22, 11);
-  else ctx.rect(cx - tw3 / 2, 48, tw3, 22);
+  if (ctx.roundRect) ctx.roundRect(cx - tipW / 2, tipY - tipH / 2, tipW, tipH, tipH / 2);
+  else ctx.rect(cx - tipW / 2, tipY - tipH / 2, tipW, tipH);
   ctx.fill();
-  ctx.fillStyle = '#496253';
-  ctx.fillText(tip, cx, 59.5);
+  ctx.fillStyle = '#3d5a4c';
+  ctx.fillText(tipText, cx, tipY + 0.5);
+}
+
+/* 当前位置撞上了障碍, 一步跨到该障碍下方(没有则跨 12px) */
+function stepTowardNextBlocker(cx, y, w, blockers) {
+  const box = pillBox(cx, y, w, 30);
+  let best = Infinity;
+  for (const b of blockers) {
+    const overlapX = !(box.right < b.left || box.left > b.right);
+    if (overlapX && b.bottom > box.top) best = Math.min(best, b.bottom);
+  }
+  if (!isFinite(best)) return 12;
+  return Math.max(6, best + 6 - (y - 15));
 }
 
 /* ---------------- 主地图上的黑洞绘制与指示 ---------------- */
