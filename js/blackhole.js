@@ -269,6 +269,9 @@ function enterTown() {
   el('hud').classList.add('hidden');
   el('townBar').classList.remove('hidden');
   el('btnTownAct').classList.remove('hidden');   // 城镇里才显示"交谈"按钮
+  // 提示条上写着"点这里", 所以也要能点(手机上没有 F 键)
+  const _pr = el('townPrompt');
+  if (_pr && !_pr._bound) { _pr._bound = true; _pr.onclick = () => townInteract(); }
   el('ui').classList.add('town');                // 让技能栏上移, 给按钮让位
   sfx('shop');
   toast('🌆 回声小镇 · 这里很安全');

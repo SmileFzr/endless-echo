@@ -183,10 +183,13 @@
   /* 城镇里技能栏上移, 给底部的"交谈"按钮让位 */
   #ui.town .skillbar{bottom:calc(88px + env(safe-area-inset-bottom))}
   #ui.town .petbar{bottom:calc(140px + env(safe-area-inset-bottom))}
+  /* 提示条文案写着"点这里", 所以它必须真的能点: pointer-events 要 auto */
   #townPrompt{position:absolute;left:50%;transform:translateX(-50%);
     bottom:calc(144px + env(safe-area-inset-bottom));padding:8px 14px;border-radius:10px;
     background:rgba(20,20,36,.9);border:1px solid rgba(255,215,106,.45);color:#ffe9b0;
-    font-size:12.5px;font-weight:700;white-space:nowrap;pointer-events:none;z-index:4}
+    font-size:12.5px;font-weight:700;white-space:nowrap;pointer-events:auto;cursor:pointer;
+    z-index:5;-webkit-tap-highlight-color:transparent;transition:transform .12s,background .12s}
+  #townPrompt:active{transform:translateX(-50%) scale(.96);background:rgba(40,40,64,.95)}
   #townPrompt.hidden{display:none!important}
   .town-act{position:absolute;left:50%;transform:translateX(-50%);
     bottom:calc(20px + env(safe-area-inset-bottom));
