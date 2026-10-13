@@ -55,14 +55,18 @@ const input = { keys: new Set(), joy: { active:false, ox:0, oy:0, dx:0, dy:0, id
 window.addEventListener('keydown', e => { input.keys.add(e.key.toLowerCase()); if (e.key === 'f' || e.key === 'F') townInteract();   // 城镇里与 NPC 交谈 / 离开
   if (e.key === 'Escape') { if (G.state === 'playing') pauseGame(); else if (G.state === 'paused') resumeGame(); } if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault(); });
 window.addEventListener('keyup', e => input.keys.delete(e.key.toLowerCase()));
+function canMoveByDrag() {
+  // 这些状态都可以用摇杆/拖拽移动(回声小镇复用同一套摇杆)
+  return G.state === 'playing' || G.state === 'town';
+}
 function getPointer(e) { const t = e.touches ? e.touches[0] : e; return { x:t.clientX, y:t.clientY, id:t.identifier !== undefined ? t.identifier : 'm' }; }
-canvas.addEventListener('touchstart', e => { e.preventDefault(); if (G.state !== 'playing') return; if (input.joy.active) return; const p = getPointer(e); input.joy.active = true; input.joy.id = p.id; input.joy.ox = p.x; input.joy.oy = p.y; input.joy.dx = 0; input.joy.dy = 0; }, { passive: false });
+canvas.addEventListener('touchstart', e => { e.preventDefault(); if (!canMoveByDrag()) return; if (input.joy.active) return; const p = getPointer(e); input.joy.active = true; input.joy.id = p.id; input.joy.ox = p.x; input.joy.oy = p.y; input.joy.dx = 0; input.joy.dy = 0; }, { passive: false });
 canvas.addEventListener('touchmove', e => { e.preventDefault(); if (!input.joy.active) return; for (const t of e.touches) if (t.identifier === input.joy.id) { input.joy.dx = t.clientX - input.joy.ox; input.joy.dy = t.clientY - input.joy.oy; const d = Math.hypot(input.joy.dx, input.joy.dy), max = 62; if (d > max) { input.joy.dx = input.joy.dx / d * max; input.joy.dy = input.joy.dy / d * max; } } }, { passive: false });
 function endTouch(e) { if (!input.joy.active) return; let still = false; for (const t of (e.touches || [])) if (t.identifier === input.joy.id) still = true; if (!still) { input.joy.active = false; input.joy.dx = 0; input.joy.dy = 0; } }
 canvas.addEventListener('touchend', endTouch, { passive: false });
 canvas.addEventListener('touchcancel', endTouch, { passive: false });
 let mouseDown = false;
-canvas.addEventListener('mousedown', e => { if (G.state !== 'playing') return; mouseDown = true; input.joy.active = true; input.joy.ox = e.clientX; input.joy.oy = e.clientY; input.joy.dx = 0; input.joy.dy = 0; });
+canvas.addEventListener('mousedown', e => { if (!canMoveByDrag()) return; mouseDown = true; input.joy.active = true; input.joy.ox = e.clientX; input.joy.oy = e.clientY; input.joy.dx = 0; input.joy.dy = 0; });
 window.addEventListener('mousemove', e => { if (!mouseDown) return; input.joy.dx = e.clientX - input.joy.ox; input.joy.dy = e.clientY - input.joy.oy; const d = Math.hypot(input.joy.dx, input.joy.dy); if (d > 62) { input.joy.dx = input.joy.dx / d * 62; input.joy.dy = input.joy.dy / d * 62; } });
 window.addEventListener('mouseup', () => { mouseDown = false; input.joy.active = false; input.joy.dx = 0; input.joy.dy = 0; });
 

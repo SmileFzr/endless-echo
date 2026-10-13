@@ -259,7 +259,7 @@ PATCHES = {
          '        <div class="hudbtns">'),
         # 主菜单显示版本号(以后改版本只需改这里)
         ('<button class="btn tiny" id="btnResetFromMenu">',
-         '<div class="ver" id="verTxt">v1.7.3</div>\n'
+         '<div class="ver" id="verTxt">v1.7.4</div>\n'
          '      <button class="btn tiny" id="btnResetFromMenu">'),
         # 主菜单加"查看图鉴"按钮
         ('<button class="btn" id="btnHelp">玩 法 说 明</button>',
@@ -499,6 +499,18 @@ PATCHES = {
         ("function hurtEnemy(e, dmg, isCrit) {",
          "function hurtEnemy(e, dmg, isCrit) {\n"
          "  if (P._god) dmg = 1e9;          // 调试无敌同时开启一击必杀\n"),
+        # 16) 城镇里也要能用摇杆走路
+        #     摇杆监听原来只在 G.state === 'playing' 时生效, 城镇是 'town', 被挡掉了。
+        #     updateTown() 本来就在读 input.joy, 放开判断即可。
+        ("function getPointer(e) {", "function canMoveByDrag() {\n"
+         "  // 这些状态都可以用摇杆/拖拽移动(回声小镇复用同一套摇杆)\n"
+         "  return G.state === 'playing' || G.state === 'town';\n"
+         "}\n"
+         "function getPointer(e) {"),
+        ("canvas.addEventListener('touchstart', e => { e.preventDefault(); if (G.state !== 'playing') return;",
+         "canvas.addEventListener('touchstart', e => { e.preventDefault(); if (!canMoveByDrag()) return;"),
+        ("canvas.addEventListener('mousedown', e => { if (G.state !== 'playing') return;",
+         "canvas.addEventListener('mousedown', e => { if (!canMoveByDrag()) return;"),
     ],
     # 8) 生肖宠物扩展(兔/蛇/马/羊/猴/鸡/猪/牛): 由 js/pets-extra.js 提供,
     #    合并进 PETS 表, 让"12 生肖"名实相符
@@ -594,6 +606,36 @@ PATCHES = {
          "  ctx.font = fnt(10, 'bold'); ctx.lineWidth = 3;"),
         ("    ctx.font = t.crit ? 'bold 17px system-ui' : 'bold 13px system-ui';",
          "    ctx.font = t.crit ? fnt(17, 'bold') : fnt(13, 'bold');"),
+        # 16b) 摇杆在城镇里也要显示(canMoveByDrag 定义在 game.js)
+        # 16b) 摇杆抽成 drawJoystick(), 城镇与正常游戏都调用
+        #      (城镇分支是 drawTown(); return;, 提前返回后原本画不到摇杆)
+        ("  if (input.joy.active && G.state === 'playing') {\n"
+         "    ctx.save();\n"
+         "    ctx.globalAlpha = 0.28; ctx.strokeStyle = '#7c8cff'; ctx.lineWidth = 3;\n"
+         "    ctx.beginPath(); ctx.arc(input.joy.ox, input.joy.oy, 58, 0, TAU); ctx.stroke();\n"
+         "    ctx.globalAlpha = 0.5; ctx.fillStyle = '#7c8cff';\n"
+         "    ctx.beginPath(); ctx.arc(input.joy.ox + input.joy.dx, input.joy.oy + input.joy.dy, 24, 0, TAU); ctx.fill();\n"
+         "    ctx.restore();\n"
+         "  }",
+         "  drawJoystick();"),
+        # 城镇分支加了绘制调用
+        ("function render() {\n  if (G.state === 'town') { drawTown(); return; }",
+         "function render() {\n"
+         "  if (G.state === 'town') { drawTown(); drawJoystick(); return; }"),
+        # 函数本体加在 render() 前面
+        ("function render() {\n  if (G.state === 'town')",
+         "/* 虚拟摇杆: 正常游戏与回声小镇共用 */\n"
+         "function drawJoystick() {\n"
+         "  if (!input.joy.active) return;\n"
+         "  if (G.state !== 'playing' && G.state !== 'town') return;\n"
+         "  ctx.save();\n"
+         "  ctx.globalAlpha = 0.28; ctx.strokeStyle = '#7c8cff'; ctx.lineWidth = 3;\n"
+         "  ctx.beginPath(); ctx.arc(input.joy.ox, input.joy.oy, 58, 0, TAU); ctx.stroke();\n"
+         "  ctx.globalAlpha = 0.5; ctx.fillStyle = '#7c8cff';\n"
+         "  ctx.beginPath(); ctx.arc(input.joy.ox + input.joy.dx, input.joy.oy + input.joy.dy, 24, 0, TAU); ctx.fill();\n"
+         "  ctx.restore();\n"
+         "}\n"
+         "function render() {\n  if (G.state === 'town')"),
     ],
     # 5) 虎宠残留字段 pounceT: 定义了但从未被读取
     "js/ui.js": [

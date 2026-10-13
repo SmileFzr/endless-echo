@@ -13,8 +13,19 @@ function fnt(px, weight) {
   if (f !== _lastFont) { ctx.font = f; _lastFont = f; }
   return f;
 }
+/* 虚拟摇杆: 正常游戏与回声小镇共用 */
+function drawJoystick() {
+  if (!input.joy.active) return;
+  if (G.state !== 'playing' && G.state !== 'town') return;
+  ctx.save();
+  ctx.globalAlpha = 0.28; ctx.strokeStyle = '#7c8cff'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(input.joy.ox, input.joy.oy, 58, 0, TAU); ctx.stroke();
+  ctx.globalAlpha = 0.5; ctx.fillStyle = '#7c8cff';
+  ctx.beginPath(); ctx.arc(input.joy.ox + input.joy.dx, input.joy.oy + input.joy.dy, 24, 0, TAU); ctx.fill();
+  ctx.restore();
+}
 function render() {
-  if (G.state === 'town') { drawTown(); return; }
+  if (G.state === 'town') { drawTown(); drawJoystick(); return; }
   ctx.fillStyle = '#07070e';
   ctx.fillRect(0, 0, W, H);
   if (!P) return;
@@ -30,14 +41,7 @@ function render() {
   drawPlayer(); drawEffects(true); drawTexts();
   ctx.restore();
   if (P.hurtFlash > 0) { ctx.fillStyle = `rgba(255,40,60,${P.hurtFlash * 0.5})`; ctx.fillRect(0, 0, W, H); }
-  if (input.joy.active && G.state === 'playing') {
-    ctx.save();
-    ctx.globalAlpha = 0.28; ctx.strokeStyle = '#7c8cff'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(input.joy.ox, input.joy.oy, 58, 0, TAU); ctx.stroke();
-    ctx.globalAlpha = 0.5; ctx.fillStyle = '#7c8cff';
-    ctx.beginPath(); ctx.arc(input.joy.ox + input.joy.dx, input.joy.oy + input.joy.dy, 24, 0, TAU); ctx.fill();
-    ctx.restore();
-  }
+  drawJoystick();
   drawPortalArrows();
   drawEliteIndicator();
   if (typeof drawBlackHoleIndicator === 'function') drawBlackHoleIndicator();

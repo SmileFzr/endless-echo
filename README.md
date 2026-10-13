@@ -1,11 +1,11 @@
 # 无尽回响 · Endless Echo
 
 [![在线试玩](https://img.shields.io/badge/▶_在线试玩-点这里开始-7c3aed?style=for-the-badge)](https://smilefzr.github.io/endless-echo/)
-[![版本](https://img.shields.io/badge/版本-v1.7.3-ffd76a?style=flat-square)](#版本历史)
+[![版本](https://img.shields.io/badge/版本-v1.7.4-ffd76a?style=flat-square)](#版本历史)
 [![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-已部署-22c55e?style=flat-square)](https://smilefzr.github.io/endless-echo/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-**🎮 直接开始玩：<https://smilefzr.github.io/endless-echo/>**　（当前版本 **v1.7.3**）
+**🎮 直接开始玩：<https://smilefzr.github.io/endless-echo/>**　（当前版本 **v1.7.4**）
 
 一个纯前端（零依赖、零构建）的 Roguelike 生存小游戏。手机、平板、桌面浏览器都能直接玩。
 
@@ -190,6 +190,7 @@ python tools/split.py          # 重新生成 index.html / css/ / js/（含所�
 python tools/verify.py         # 校验：产物与期望一致、源码一行不丢、node --check 通过
 node tools/smoke-test.js       # 运行时冒烟测试
 node tools/test-blackhole.js   # 黑洞/小镇/特殊能力/图鉴回归测试
+node tools/test-drag-move.js   # 拖动屏幕走路(含回声小镇)
 node tools/test-elites.js      # 精英怪类型 / 专属机制 / 图鉴分类
 node tools/test-elite-ui.js    # 精英身上的 UI 元素不重叠
 node tools/test-debug-cmds.js  # 调试指令是否都可用
@@ -286,7 +287,8 @@ G.bh.timer = 1;   // 1 秒后刷出黑洞
 | v1.7.0 | 新增 **8 种精英怪**、图鉴改为**普通/精英**两类 |
 | v1.7.1 | 修精英标记与血量文字**重叠**、标记圈跟随体型 |
 | v1.7.2 | canvas 文字加**中文字体回退**（修中文显示成方块） |
-| **v1.7.3** | **当前版本**：修**精英不记入图鉴**、精英图鉴**没有介绍** |
+| v1.7.3 | 修**精英不记入图鉴**、精英图鉴**没有介绍** |
+| **v1.7.4** | **当前版本**：修**回声小镇里无法拖动屏幕走路** |
 
 > 版本号沿用原作者在手机上迭代时的命名。仓库的每次发布都在
 > [Tags](https://github.com/SmileFzr/endless-echo/tags) 里可以看到。
