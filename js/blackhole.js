@@ -578,14 +578,28 @@ function syncOneBar(bar) {
   if (!owned.length) bar.innerHTML = '<span class="spnone">还没有特殊能力 · 找镇上的人聊聊</span>';
 }
 
-/* ---------------- 城镇绘制 ---------------- */
+/* ============================================================
+   城镇绘制 —— 山谷里的小村庄
+   美术参考: 层叠圆润山丘 + 草地渐变 + 弯曲小路 + emoji 房屋树木。
+   注意: 这里只负责"画"。NPC 坐标、任务、对话、奖励、出口判定、
+         建筑碰撞全部沿用 updateTown() 里的原逻辑, 没有改动。
+
+   坐标约定: 冒号后带"世界"的用世界坐标(会被镜头平移/缩放);
+             带"屏幕"的用屏幕坐标(固定在画面上, 拖动时不抖)。
+   ============================================================ */
+
+/* 房屋: x/y 与对应 NPC 相同, 绘制时整体上移一点,
+   让"门口"正好落在 NPC 站的位置(也更接近参考图里房子在人上面的构图) */
 const townBuildings = [
-  { x: -175, y: -140, w: 74, h: 58, roof: '#7a4a3a', wall: '#c9a882', label: '猎' },
-  { x: 175, y: -140, w: 74, h: 58, roof: '#5a4a6a', wall: '#b9a2c9', label: '炉' },
-  { x: 195, y: 165, w: 66, h: 52, roof: '#3a5a6a', wall: '#a2c0c9', label: '驿' },
-  { x: -190, y: 170, w: 66, h: 52, roof: '#6a5a3a', wall: '#c9bb9a', label: '书' },
-  { x: 0, y: -195, w: 84, h: 60, roof: '#8a3a4a', wall: '#d9b0b8', label: '镇' },
+  { x: -175, y: -140, w: 78, h: 60, emoji: '🏡', label: '猎' },
+  { x: 175, y: -140, w: 78, h: 60, emoji: '🏠', label: '炉' },
+  { x: 195, y: 165, w: 70, h: 54, emoji: '🏡', label: '驿' },
+  { x: -190, y: 170, w: 70, h: 54, emoji: '🏚️', label: '书' },
+  { x: 0, y: -195, w: 88, h: 64, emoji: '🏠', label: '镇' },
 ];
+
+const HOUSE_LIFT = 34;      // 房屋相对 NPC 上移的距离
+let townSkyH = 0;           // 天空带高度(每帧算一次, 给山丘用)
 
 /* 城镇画面缩放: 小镇世界只有 464x424, 在宽屏上会显得很小。
    宽屏最多放大 1.55 倍; 窄屏(手机)保持 1.0, 维持原本设计尺寸不缩小。
@@ -594,108 +608,284 @@ function townZoom() {
   return clamp(Math.min(W / 720, H / 660), 1, 1.55);
 }
 
+/* 矮胖的小山丘(屏幕坐标): 用圆弧把尖角磨圆, 看起来软一点 */
+function villageHill(top, bottom, color, phase, amp, rad) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(-60, bottom);
+  const n = 7, span = W + 120;
+  for (let k = 0; k <= n; k++) {
+    const x = -60 + (span * k) / n;
+    const y = top + Math.sin(k * 1.9 + phase) * amp;
+    ctx.lineTo(x, y);
+    ctx.arc(x, y, rad, Math.PI, Math.PI * 1.72);
+  }
+  ctx.lineTo(W + 60, bottom);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/* 弯曲的小路(世界坐标) */
+function villagePath(points, width, color) {
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let k = 1; k + 2 < points.length; k += 2) {
+    const c1 = points[k], c2 = points[k + 1], to = points[k + 2];
+    ctx.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], to[0], to[1]);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+}
+
+function townHash(n) {
+  const t = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return t - Math.floor(t);
+}
+
 function drawTown() {
   const zoom = townZoom();
-  // 缩放后小镇之外的空白太大, 先把整屏铺上地面色, 看起来像镇外的草地
-  ctx.fillStyle = '#233527';
+  const halfW = W / (2 * zoom), halfH = H / (2 * zoom);
+  const left = T.x - halfW, right = T.x + halfW;
+  const top = T.y - halfH, bottom = T.y + halfH;
+  // 山脚线: 贴着当前视口的上缘, 这样山丘始终在"地面之后"
+  const horizon = top + 30;
+  townSkyH = Math.max(H * 0.20, Math.min(H * 0.34, H / 2 + (-horizon) * zoom));
+
+  /* ---------- 1) 天空(屏幕坐标) ---------- */
+  // 必须铺满整屏: 地面只画到视口下缘附近, 中间若留空会露出上一帧的残留
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#dff2f3');
+  sky.addColorStop(0.45, '#eaf6e6');
+  sky.addColorStop(0.80, '#cfebc9');
+  sky.addColorStop(1, '#b6ddb0');
+  ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
+
+  /* ---------- 2) 草地(世界坐标) ---------- */
   ctx.save();
   ctx.translate(W / 2, H / 2);
   ctx.scale(zoom, zoom);
   ctx.translate(-T.x, -T.y);
 
-  // 地面
-  ctx.fillStyle = '#2f4a35';
-  ctx.fillRect(-400, -400, 800, 800);
-  // 石板路
-  ctx.fillStyle = '#4a4640';
-  ctx.fillRect(-46, -260, 92, 520);
-  ctx.fillRect(-260, -46, 520, 92);
-  ctx.fillStyle = 'rgba(255,255,255,0.05)';
-  for (let i = -250; i < 250; i += 40) ctx.fillRect(-44, i, 88, 2);
+  const gTop = horizon, gBot = bottom + 40;
+  const ground = ctx.createLinearGradient(0, gTop, 0, bottom);
+  ground.addColorStop(0, '#9bc783');
+  ground.addColorStop(1, '#6fa56d');
+  ctx.fillStyle = ground;
+  ctx.fillRect(left - 60, gTop, (right - left) + 120, gBot - gTop);
 
-  // 围墙
-  ctx.strokeStyle = '#5b4a3a'; ctx.lineWidth = 10;
-  ctx.strokeRect(-232, -212, 464, 424);
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 3;
-  ctx.strokeRect(-232, -212, 464, 424);
-
-  // 建筑
-  for (const b of townBuildings) {
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath(); ctx.ellipse(b.x, b.y + b.h / 2 + 5, b.w * 0.5, 7, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = b.wall;
-    ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2 + 8, b.w, b.h - 8);
-    ctx.fillStyle = b.roof;
-    ctx.beginPath();
-    ctx.moveTo(b.x - b.w / 2 - 6, b.y - b.h / 2 + 10);
-    ctx.lineTo(b.x, b.y - b.h / 2 - 16);
-    ctx.lineTo(b.x + b.w / 2 + 6, b.y - b.h / 2 + 10);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(255,220,150,0.85)';
-    ctx.fillRect(b.x - 9, b.y + 2, 18, 16);
-    ctx.font = fnt(13, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillText(b.label, b.x, b.y - b.h / 2 + 30);
+  // 淡草皮格子, 避免地面是一整块纯色
+  ctx.fillStyle = 'rgba(255,255,255,0.045)';
+  const cx0 = Math.floor((left - 60) / 56) * 56;
+  for (let x = cx0; x < right + 60; x += 56) {
+    for (let y = Math.floor(gTop / 56) * 56; y < gBot; y += 56) {
+      if (((x / 56) + (y / 56)) % 2 === 0) ctx.fillRect(x, y, 56, 56);
+    }
   }
 
-  // 出口(南门)
+  /* ---------- 3) 远端地面(世界): 盖住山脚, 让山丘"只是背景" ---------- */
+  ctx.fillStyle = '#a5c99c';
+  ctx.fillRect(left - 80, gTop - 26, (right - left) + 160, 26);
+  ctx.fillStyle = '#83b47d';
+  ctx.fillRect(left - 80, gTop - 13, (right - left) + 160, 13);
+
+  /* ---------- 4) 山丘(屏幕坐标): 山脚正好压住 gTop ---------- */
+  ctx.restore();
+  const hz = townSkyH;
+  villageHill(hz - 96, hz + 8, '#a5c99c', 0.6, 26, 44);
+  villageHill(hz - 46, hz + 8, '#83b47d', 2.1, 18, 36);
+
+  /* ---------- 5) 世界坐标: 小路 / 花草 / 房屋 / 树木 / NPC / 玩家 ---------- */
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-T.x, -T.y);
+
+  const MAIN = [[-210, 150], [-140, 190], [-40, 120], [0, 40], [40, -40],
+                [140, -96], [210, -136]];
+  villagePath(MAIN, 44, 'rgba(0,0,0,0.10)');
+  villagePath(MAIN, 36, '#d9c49b');
+
+  for (const b of townBuildings) {
+    const by = b.y - HOUSE_LIFT;
+    const spur = [[b.x, by + 46], [b.x - 10, by + 76], [b.x - 4, by + 100], [b.x, by + 118]];
+    villagePath(spur, 11, 'rgba(0,0,0,0.08)');
+    villagePath(spur, 9, '#e8d6b2');
+  }
+
+  // 花草点缀(位置来自确定性哈希, 不会闪烁)
+  for (let k = 0; k < 150; k++) {
+    const x = left - 30 + townHash(k) * ((right - left) + 60);
+    const y = gTop + 10 + townHash(k + 977) * (gBot - gTop - 20);
+    let nearHouse = false;
+    for (const b of townBuildings) {
+      if (Math.hypot(x - b.x, y - (b.y - HOUSE_LIFT)) < 62) { nearHouse = true; break; }
+    }
+    if (nearHouse) continue;
+    ctx.globalAlpha = 0.5 + (k % 4) * 0.1;
+    ctx.fillStyle = k % 3 ? '#f9edbb' : '#fff4df';
+    ctx.beginPath();
+    ctx.arc(x, y, k % 3 === 0 ? 2.5 : 1.6, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = 'rgba(70,120,70,0.32)';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  for (let k = 0; k < 50; k++) {
+    const x = left - 20 + townHash(k + 31) * ((right - left) + 40);
+    const y = gTop + 16 + townHash(k + 613) * (gBot - gTop - 30);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(x + 2, y - 6, x + 5, y - 11);
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(x - 2, y - 6, x - 4, y - 9);
+    ctx.stroke();
+  }
+
+  // 房屋
+  for (const b of townBuildings) {
+    const by = b.y - HOUSE_LIFT;
+    ctx.fillStyle = 'rgba(40,70,50,0.22)';
+    ctx.beginPath();
+    ctx.ellipse(b.x, by + b.h * 0.42, b.w * 0.46, 9, 0, 0, TAU);
+    ctx.fill();
+    drawSprite(b.emoji, b.x, by, b.h * 0.94);
+    const lx = b.x + b.w * 0.34, ly = by - b.h * 0.34;
+    ctx.fillStyle = 'rgba(53,65,61,0.78)';
+    ctx.beginPath(); ctx.arc(lx, ly, 12, 0, TAU); ctx.fill();
+    ctx.font = fnt(12, 'bold');
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff8e9';
+    ctx.fillText(b.label, lx, ly + 0.5);
+  }
+
+  // 果树与树丛
+  const trees = [
+    ['🌳', -218, -30, 54], ['🌲', 222, -44, 50], ['🍎', -224, 74, 46],
+    ['🌳', 216, 88, 48], ['🌲', -46, 186, 44], ['🌳', 62, 174, 42],
+  ];
+  for (const [emoji, x, y, size] of trees) {
+    ctx.fillStyle = 'rgba(40,70,50,0.20)';
+    ctx.beginPath(); ctx.ellipse(x, y + size * 0.38, size * 0.30, 7, 0, 0, TAU); ctx.fill();
+    drawSprite(emoji, x, y, size);
+  }
+
+  // 南门(出口)
   const pulse = 0.5 + Math.sin(T.anim * 3) * 0.5;
-  ctx.strokeStyle = 'rgba(120,220,255,' + (0.45 + pulse * 0.35) + ')';
+  ctx.strokeStyle = 'rgba(90,180,220,' + (0.55 + pulse * 0.35) + ')';
   ctx.lineWidth = 3;
   ctx.beginPath(); ctx.arc(T.exit.x, T.exit.y, T.exit.r, 0, TAU); ctx.stroke();
-  ctx.fillStyle = 'rgba(120,220,255,' + (0.10 + pulse * 0.10) + ')';
+  ctx.fillStyle = 'rgba(150,225,255,' + (0.16 + pulse * 0.14) + ')';
   ctx.beginPath(); ctx.arc(T.exit.x, T.exit.y, T.exit.r, 0, TAU); ctx.fill();
   drawSprite('🚪', T.exit.x, T.exit.y, 34);
-  ctx.font = fnt(11, 'bold'); ctx.fillStyle = '#b8e8ff';
-  ctx.fillText('离开小镇', T.exit.x, T.exit.y + T.exit.r + 12);
+  ctx.font = fnt(11, 'bold');
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = 'rgba(30,50,40,0.75)'; ctx.lineWidth = 3;
+  ctx.strokeText('离开小镇', T.exit.x, T.exit.y + T.exit.r + 13);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('离开小镇', T.exit.x, T.exit.y + T.exit.r + 13);
 
-  // NPC
+  // 村民
   for (const npc of NPCS) {
     const st = townNpcState(npc);
     const here = T.near === npc;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(npc.x, npc.y + 16, 11, 4, 0, 0, TAU); ctx.fill();
+    const bob = Math.sin(T.anim * 2.4 + npc.x * 0.05) * 2.2;
+
+    ctx.fillStyle = 'rgba(40,70,50,0.28)';
+    ctx.beginPath(); ctx.ellipse(npc.x, npc.y + 17, 11, 4, 0, 0, TAU); ctx.fill();
+
     if (here) {
       const pl = 0.5 + Math.sin(T.anim * 6) * 0.5;
-      ctx.strokeStyle = 'rgba(255,215,106,' + (0.5 + pl * 0.4) + ')'; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.arc(npc.x, npc.y, 27 + pl * 3, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,196,86,' + (0.6 + pl * 0.4) + ')';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(npc.x, npc.y + bob, 27 + pl * 3, 0, TAU); ctx.stroke();
     }
-    drawSprite(npc.emoji, npc.x, npc.y, 36);
-    // 任务状态气泡
+    drawSprite(npc.emoji, npc.x, npc.y + bob, 38);
+
     let mark = null, col = '#ffd76a';
     if (!st) mark = '❗';
     else if (st.done && !st.claimed) { mark = '✅'; col = '#4ade80'; }
     if (mark) {
       ctx.font = fnt(17, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.beginPath(); ctx.arc(npc.x + 20, npc.y - 22, 10, 0, TAU); ctx.fill();
-      ctx.fillStyle = col; ctx.fillText(mark, npc.x + 20, npc.y - 21);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.arc(npc.x + 20, npc.y - 24, 10.5, 0, TAU); ctx.fill();
+      ctx.fillStyle = col; ctx.fillText(mark, npc.x + 20, npc.y - 23);
     }
+
+    // 名牌: 绿色药丸底 + 白字(参考图里村民名签的做法)
     ctx.font = fnt(11, 'bold'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3;
-    ctx.strokeText(npc.name, npc.x, npc.y + 30);
-    ctx.fillStyle = '#ffe9b0'; ctx.fillText(npc.name, npc.x, npc.y + 30);
+    const tw = ctx.measureText(npc.name).width;
+    const pw = tw + 14, ph = 17, py = npc.y + 30;
+    ctx.fillStyle = 'rgba(63,101,87,0.82)';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(npc.x - pw / 2, py - ph / 2, pw, ph, 9);
+    else ctx.rect(npc.x - pw / 2, py - ph / 2, pw, ph);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(npc.name, npc.x, py + 0.5);
   }
 
   // 玩家
-  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillStyle = 'rgba(40,70,50,0.30)';
   ctx.beginPath(); ctx.ellipse(T.x, T.y + 16, 12, 4, 0, 0, TAU); ctx.fill();
-  drawSprite('🧙', T.x, T.y, 36);
+  drawSprite('🧙', T.x, T.y, 38);
 
   ctx.restore();
 
-  // 标题条(画在屏幕坐标里, 不随城镇缩放变化)
+  /* ---------- 6) 阳光、云、薄雾(屏幕坐标) ---------- */
+  const sunX = W * 0.85, sunY = Math.max(38, townSkyH * 0.30), sunR = Math.min(W, H) * 0.052;
+  const halo = ctx.createRadialGradient(sunX, sunY, sunR * 0.4, sunX, sunY, sunR * 4.2);
+  halo.addColorStop(0, 'rgba(255,236,166,0.85)');
+  halo.addColorStop(0.35, 'rgba(255,236,166,0.22)');
+  halo.addColorStop(1, 'rgba(255,236,166,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(sunX - sunR * 4.2, sunY - sunR * 4.2, sunR * 8.4, sunR * 8.4);
+  ctx.fillStyle = '#ffda7b';
+  ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, TAU); ctx.fill();
+
+  const drift = Math.sin(T.anim * 0.18) * 0.5 + 0.5;
+  ctx.globalAlpha = 0.72;
+  ctx.font = fnt(Math.round(Math.min(W, H) * 0.070));
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('☁️', W * (0.12 + drift * 0.05), Math.max(30, townSkyH * 0.30));
+  ctx.fillText('☁️', W * (0.58 + drift * 0.09), Math.max(24, townSkyH * 0.17));
+  ctx.globalAlpha = 1;
+
+  const mist = ctx.createLinearGradient(0, townSkyH - 8, 0, townSkyH + 54);
+  mist.addColorStop(0, 'rgba(255,255,255,0.28)');
+  mist.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = mist;
+  ctx.fillRect(0, townSkyH - 8, W, 62);
+
+  /* ---------- 7) 标题与提示(屏幕坐标) ---------- */
   const cx = W / 2;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const title = '🌿 回声小镇 · 山谷里的村庄';
   ctx.font = fnt(15, 'bold');
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.fillRect(cx - 118, 14, 236, 30);
-  ctx.fillStyle = '#ffe9b0';
-  ctx.fillText('🌆 回声小镇 · 绝对安全', cx, 29);
+  const tw2 = ctx.measureText(title).width + 34;
+  ctx.fillStyle = 'rgba(255,248,233,0.88)';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(cx - tw2 / 2, 14, tw2, 30, 15);
+  else ctx.rect(cx - tw2 / 2, 14, tw2, 30);
+  ctx.fill();
+  ctx.fillStyle = '#3b5545';
+  ctx.fillText(title, cx, 29.5);
+
+  const tip = '拖动屏幕移动　靠近 NPC 按 F 交谈　南门离开';
   ctx.font = fnt(11);
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillText('拖动屏幕移动　靠近 NPC 按 F 交谈　南门离开', cx, 54);
+  const tw3 = ctx.measureText(tip).width + 22;
+  ctx.fillStyle = 'rgba(255,248,233,0.72)';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(cx - tw3 / 2, 48, tw3, 22, 11);
+  else ctx.rect(cx - tw3 / 2, 48, tw3, 22);
+  ctx.fill();
+  ctx.fillStyle = '#496253';
+  ctx.fillText(tip, cx, 59.5);
 }
 
 /* ---------------- 主地图上的黑洞绘制与指示 ---------------- */

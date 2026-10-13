@@ -25,6 +25,7 @@ function makeCtx() {
     ctx[m] = rec(m);
   }
   ctx.createLinearGradient = () => ({ addColorStop() {} });
+  ctx.createRadialGradient = () => ({ addColorStop() {} });
   ctx.measureText = (t) => ({ width: String(t).length * 6 });
   return ctx;
 }

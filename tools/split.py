@@ -259,7 +259,7 @@ PATCHES = {
          '        <div class="hudbtns">'),
         # 主菜单显示版本号(以后改版本只需改这里)
         ('<button class="btn tiny" id="btnResetFromMenu">',
-         '<div class="ver" id="verTxt">v1.7.4</div>\n'
+         '<div class="ver" id="verTxt">v1.8.0</div>\n'
          '      <button class="btn tiny" id="btnResetFromMenu">'),
         # 主菜单加"查看图鉴"按钮
         ('<button class="btn" id="btnHelp">玩 法 说 明</button>',

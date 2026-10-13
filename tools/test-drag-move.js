@@ -27,6 +27,7 @@ function makeCtx() {
     ctx[m] = (...a) => drawn.push({ name: m, args: a });
   }
   ctx.createLinearGradient = () => ({ addColorStop() {} });
+  ctx.createRadialGradient = () => ({ addColorStop() {} });
   ctx.measureText = () => ({ width: 20 });
   return ctx;
 }
